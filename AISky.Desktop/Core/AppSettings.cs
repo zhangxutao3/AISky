@@ -8,6 +8,7 @@ public sealed record AppSettings
     public int AutoSyncForecastHours { get; init; } = 360;
     public int LatestProbeDays { get; init; } = 3;
     public string DataAccessPassword { get; init; } = "";
+    public bool FirstRunSetupCompleted { get; init; }
     public int CacheRetentionDays { get; init; } = 3;
     public int MaxConcurrentDownloads { get; init; } = 2;
     public bool StartWithWindows { get; init; }

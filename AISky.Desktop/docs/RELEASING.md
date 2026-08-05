@@ -44,6 +44,24 @@ gh auth login
   -PythonArchivePath ..\artifacts\v0.7.0\python-3.11.9-embed-amd64.zip
 ```
 
+日常补丁发布可以直接复用上一版已经通过自检的完整 Python 目录，省去重复安装依赖；
+脚本仍会在打包前再次执行运行时自检：
+
+```powershell
+.\scripts\Publish-AISky.ps1 `
+  -Version 0.8.1 `
+  -Repository my-name/aisky-desktop `
+  -PythonRuntimePath ..\artifacts\release-smoke-v0.8.0-final\Python
+```
+
+开发过程中的快速数据回归只运行基础下载、解析和索引测试：
+
+```powershell
+..\scripts\Test-AISky.ps1 -Quick
+```
+
+正式发布前仍需省略 `-Quick`，执行全部同步、清理和容错测试。
+
 ## 打包并发布到 GitHub Release
 
 先复制 `release-notes.example.md`，填写本次更新内容，然后运行：

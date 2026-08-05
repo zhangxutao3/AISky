@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
-    [string]$Python = "python"
+    [string]$Python = "python",
+    [switch]$Quick
 )
 
 $ErrorActionPreference = "Stop"
@@ -25,11 +26,16 @@ try {
         throw "Unable to create the NetCDF test fixture."
     }
 
-    $testFiles = @(
-        "smoke_test.py",
-        "phase5_test.py",
-        "phase7_resilience_test.py"
-    )
+    $testFiles = if ($Quick) {
+        @("smoke_test.py")
+    }
+    else {
+        @(
+            "smoke_test.py",
+            "phase5_test.py",
+            "phase7_resilience_test.py"
+        )
+    }
     foreach ($testFile in $testFiles) {
         Write-Host "Running $testFile"
         & $Python (Join-Path $tests $testFile) `
@@ -41,7 +47,12 @@ try {
         }
     }
 
-    Write-Host "AISky data-pipeline tests passed." -ForegroundColor Green
+    if ($Quick) {
+        Write-Host "AISky quick data-pipeline test passed." -ForegroundColor Green
+    }
+    else {
+        Write-Host "AISky full data-pipeline tests passed." -ForegroundColor Green
+    }
 }
 finally {
     $resolvedTarget = [IO.Path]::GetFullPath($temporaryRoot)

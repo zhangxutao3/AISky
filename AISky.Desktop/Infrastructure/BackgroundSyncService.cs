@@ -21,6 +21,17 @@ public sealed record BackgroundSyncStatus(
     DateTimeOffset UpdatedUtc,
     bool IsError = false);
 
+public sealed record FirstForecastPreparationResult(
+    ForecastIndex Index,
+    string Model,
+    string? InitKey,
+    int ExpectedRuns,
+    int AvailableRuns,
+    bool IsComplete,
+    int Downloaded,
+    int Skipped,
+    int Failed);
+
 public sealed class BackgroundSyncService(
     IDataWorkerClient dataWorker,
     FileLogService log) : IDisposable
@@ -243,6 +254,93 @@ public sealed class BackgroundSyncService(
                 $"序列补齐失败：{FriendlyError(exception)}",
                 isError: true);
             return null;
+        }
+        finally
+        {
+            _operationLock.Release();
+        }
+    }
+
+    public async Task<FirstForecastPreparationResult> PrepareFirstForecastAsync(
+        string model,
+        string password,
+        CancellationToken cancellationToken = default)
+    {
+        const int forecastHours = 360;
+        const int expectedRuns = forecastHours / 3;
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (!Models.Contains(model, StringComparer.Ordinal))
+        {
+            throw new ArgumentOutOfRangeException(nameof(model), model, "不支持的预报模型。");
+        }
+        if (!await _operationLock.WaitAsync(0, cancellationToken))
+        {
+            throw new InvalidOperationException("已有数据任务正在运行，请稍候再试。");
+        }
+
+        using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            _shutdown.Token);
+        try
+        {
+            Publish(
+                BackgroundSyncState.Syncing,
+                $"正在寻找 {model} 最新起报并下载完整 15 天预报");
+            var progress = new Progress<DataWorkerProgress>(item =>
+                Publish(
+                    BackgroundSyncState.Syncing,
+                    item.IsWarning ? $"首次准备提醒：{item.Message}" : item.Message));
+            var result = await dataWorker.SyncLatestAsync(
+                new SyncLatestRequest(
+                    model,
+                    password,
+                    Math.Clamp(_settings.LatestProbeDays, 1, 14),
+                    forecastHours),
+                progress,
+                linkedCancellation.Token);
+
+            var availableLeads = result.InitKey is null
+                ? new HashSet<int>()
+                : result.Index.Runs
+                    .Where(item =>
+                        item.Model == model
+                        && item.InitKey == result.InitKey)
+                    .Select(item => item.LeadHours)
+                    .ToHashSet();
+            var isComplete = result.Found
+                && Enumerable.Range(1, expectedRuns)
+                    .All(index => availableLeads.Contains(index * 3));
+            var availableRuns = availableLeads.Count(lead =>
+                lead >= 3 && lead <= forecastHours && lead % 3 == 0);
+            IndexUpdated?.Invoke(this, result.Index);
+
+            var message = isComplete
+                ? $"{model} 首次数据准备完成：{availableRuns}/{expectedRuns} 个预报时次"
+                : result.Found
+                    ? $"{model} 当前起报尚未完整：{availableRuns}/{expectedRuns} 个预报时次"
+                    : $"最近 {_settings.LatestProbeDays} 天未找到 {model} 可用起报";
+            await log.WriteAsync(
+                isComplete ? "INFO" : "WARN",
+                $"First forecast preparation finished. model={model}, init={result.InitKey}, complete={isComplete}, available={availableRuns}, expected={expectedRuns}, downloaded={result.Downloaded}, skipped={result.Skipped}, failed={result.Failed}.");
+            ScheduleAfterCompletion(message, !isComplete);
+            return new FirstForecastPreparationResult(
+                result.Index,
+                model,
+                result.InitKey,
+                expectedRuns,
+                availableRuns,
+                isComplete,
+                result.Downloaded,
+                result.Skipped,
+                result.Failed);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            await log.WriteAsync("ERROR", $"First forecast preparation failed: {exception}");
+            ScheduleAfterCompletion(
+                $"首次数据准备失败：{FriendlyError(exception)}",
+                isError: true);
+            throw;
         }
         finally
         {

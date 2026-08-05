@@ -56,6 +56,8 @@ let windParticles = [];
 let windFrame = 0;
 let windLastFrame = 0;
 let prefetchGeneration = 0;
+let lastViewportWidth = 0;
+let lastViewportHeight = 0;
 
 function clamp(value, minimum, maximum) {
   return Math.max(minimum, Math.min(maximum, value));
@@ -66,7 +68,7 @@ function wrapLongitude(lon) {
 }
 
 function setConstrainedView(candidate) {
-  const width = clamp(candidate.right - candidate.left, 12, 360);
+  const width = clamp(candidate.right - candidate.left, 12, 720);
   const height = clamp(candidate.top - candidate.bottom, 8, 170);
   const left = wrapLongitude(candidate.left);
   const top = clamp(candidate.top, worldView.bottom + height, worldView.top);
@@ -76,6 +78,32 @@ function setConstrainedView(candidate) {
     top,
     bottom: top - height,
   });
+}
+
+function resizeViewForViewport(width, height, force = false) {
+  if (width <= 0 || height <= 0) return;
+  if (!force && width === lastViewportWidth && height === lastViewportHeight) return;
+
+  const longitudeSpan = view.right - view.left;
+  const latitudeSpan = view.top - view.bottom;
+  const referenceWidth = lastViewportWidth || width;
+  const referenceHeight = lastViewportHeight || height;
+  const degreesPerPixel = Math.max(
+    longitudeSpan / referenceWidth,
+    latitudeSpan / referenceHeight,
+  );
+  const targetWidth = clamp(degreesPerPixel * width, 12, 720);
+  const targetHeight = clamp(degreesPerPixel * height, 8, 170);
+  const centerLongitude = (view.left + view.right) / 2;
+  const centerLatitude = (view.top + view.bottom) / 2;
+  setConstrainedView({
+    left: centerLongitude - targetWidth / 2,
+    right: centerLongitude + targetWidth / 2,
+    top: centerLatitude + targetHeight / 2,
+    bottom: centerLatitude - targetHeight / 2,
+  });
+  lastViewportWidth = width;
+  lastViewportHeight = height;
 }
 
 function project(lon, lat, width, height) {
@@ -979,8 +1007,11 @@ async function refreshWindAnimation(generation) {
 async function render() {
   const generation = ++renderGeneration;
   const ratio = Math.min(window.devicePixelRatio || 1, 2);
-  const width = Math.round(canvas.clientWidth * ratio);
-  const height = Math.round(canvas.clientHeight * ratio);
+  const clientWidth = Math.max(1, canvas.clientWidth);
+  const clientHeight = Math.max(1, canvas.clientHeight);
+  resizeViewForViewport(clientWidth, clientHeight);
+  const width = Math.round(clientWidth * ratio);
+  const height = Math.round(clientHeight * ratio);
   if (canvas.width !== width || canvas.height !== height) {
     canvas.width = width;
     canvas.height = height;
@@ -1191,6 +1222,7 @@ window.chrome?.webview?.addEventListener("message", (event) => {
     activeLead = Number(message.lead) || 0;
   } else if (message.type === "reset-view") {
     Object.assign(view, worldView);
+    resizeViewForViewport(canvas.clientWidth, canvas.clientHeight, true);
     void render();
   } else if (message.type === "set-theme") {
     mapTheme = message.theme === "dark" ? "dark" : "light";
@@ -1209,6 +1241,7 @@ window.chrome?.webview?.addEventListener("message", (event) => {
 
 window.addEventListener("resize", () => {
   stopWindAnimation();
+  resizeViewForViewport(canvas.clientWidth, canvas.clientHeight);
   requestRender();
   if (!pointPanel.hidden) {
     requestAnimationFrame(() => drawPointChart(pointSeriesData));

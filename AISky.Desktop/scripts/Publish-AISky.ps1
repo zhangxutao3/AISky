@@ -9,6 +9,7 @@ param(
     [string]$NotesFile = '',
     [string]$OutputDirectory = '',
     [string]$PythonArchivePath = '',
+    [string]$PythonRuntimePath = '',
     [switch]$Upload
 )
 
@@ -93,38 +94,56 @@ Write-Host "正在准备内置 Python $pythonVersion 数据运行时..."
 $pythonArchive = Join-Path $OutputDirectory $pythonArchiveName
 $pythonRuntimeDirectory = Join-Path $stageDirectory 'Python'
 $pythonSitePackages = Join-Path $pythonRuntimeDirectory 'Lib\site-packages'
-if ([string]::IsNullOrWhiteSpace($PythonArchivePath)) {
-    Invoke-WebRequest -Uri $pythonDownloadUrl -OutFile $pythonArchive
+if (-not [string]::IsNullOrWhiteSpace($PythonRuntimePath)) {
+    if (-not [string]::IsNullOrWhiteSpace($PythonArchivePath)) {
+        throw 'PythonRuntimePath 与 PythonArchivePath 不能同时使用。'
+    }
+    $PythonRuntimePath = (Resolve-Path -LiteralPath $PythonRuntimePath).Path
+    if (-not (Test-Path -LiteralPath (Join-Path $PythonRuntimePath 'python.exe'))) {
+        throw "指定的 Python 运行时缺少 python.exe：$PythonRuntimePath"
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $PythonRuntimePath 'Lib\site-packages\netCDF4\__init__.py'))) {
+        throw "指定的 Python 运行时缺少 netCDF4：$PythonRuntimePath"
+    }
+    Write-Host "正在复用已验证的完整 Python 运行时：$PythonRuntimePath"
+    New-Item -ItemType Directory -Path $pythonRuntimeDirectory -Force | Out-Null
+    Get-ChildItem -LiteralPath $PythonRuntimePath -Force |
+        Copy-Item -Destination $pythonRuntimeDirectory -Recurse
 }
 else {
-    $PythonArchivePath = (Resolve-Path -LiteralPath $PythonArchivePath).Path
-    Write-Host "正在复用本地 Python 运行时：$PythonArchivePath"
-    Copy-Item -LiteralPath $PythonArchivePath -Destination $pythonArchive
-}
-Expand-Archive -LiteralPath $pythonArchive -DestinationPath $pythonRuntimeDirectory
-New-Item -ItemType Directory -Path $pythonSitePackages -Force | Out-Null
+    if ([string]::IsNullOrWhiteSpace($PythonArchivePath)) {
+        Invoke-WebRequest -Uri $pythonDownloadUrl -OutFile $pythonArchive
+    }
+    else {
+        $PythonArchivePath = (Resolve-Path -LiteralPath $PythonArchivePath).Path
+        Write-Host "正在复用本地 Python 嵌入包：$PythonArchivePath"
+        Copy-Item -LiteralPath $PythonArchivePath -Destination $pythonArchive
+    }
+    Expand-Archive -LiteralPath $pythonArchive -DestinationPath $pythonRuntimeDirectory
+    New-Item -ItemType Directory -Path $pythonSitePackages -Force | Out-Null
 
-$pythonPathFile = Join-Path $pythonRuntimeDirectory 'python311._pth'
-if (-not (Test-Path -LiteralPath $pythonPathFile)) {
-    throw '内置 Python 缺少 python311._pth。'
-}
-$pythonPathEntries = Get-Content -LiteralPath $pythonPathFile
-$pythonPathEntries = $pythonPathEntries | ForEach-Object {
-    if ($_ -eq '#import site') { 'import site' } else { $_ }
-}
-if ($pythonPathEntries -notcontains 'Lib\site-packages') {
-    $pythonPathEntries += 'Lib\site-packages'
-}
-$pythonPathEntries | Set-Content -LiteralPath $pythonPathFile -Encoding ASCII
+    $pythonPathFile = Join-Path $pythonRuntimeDirectory 'python311._pth'
+    if (-not (Test-Path -LiteralPath $pythonPathFile)) {
+        throw '内置 Python 缺少 python311._pth。'
+    }
+    $pythonPathEntries = Get-Content -LiteralPath $pythonPathFile
+    $pythonPathEntries = $pythonPathEntries | ForEach-Object {
+        if ($_ -eq '#import site') { 'import site' } else { $_ }
+    }
+    if ($pythonPathEntries -notcontains 'Lib\site-packages') {
+        $pythonPathEntries += 'Lib\site-packages'
+    }
+    $pythonPathEntries | Set-Content -LiteralPath $pythonPathFile -Encoding ASCII
 
-python -m pip install `
-    --disable-pip-version-check `
-    --no-compile `
-    --only-binary=:all: `
-    --target $pythonSitePackages `
-    -r (Join-Path $projectRoot 'DataWorker\requirements.txt')
-if ($LASTEXITCODE -ne 0) {
-    throw '内置 Python 的 NetCDF 依赖安装失败。'
+    python -m pip install `
+        --disable-pip-version-check `
+        --no-compile `
+        --only-binary=:all: `
+        --target $pythonSitePackages `
+        -r (Join-Path $projectRoot 'DataWorker\requirements.txt')
+    if ($LASTEXITCODE -ne 0) {
+        throw '内置 Python 的 NetCDF 依赖安装失败。'
+    }
 }
 
 $bundledPython = Join-Path $pythonRuntimeDirectory 'python.exe'

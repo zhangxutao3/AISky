@@ -99,13 +99,10 @@ public sealed partial class MainPage : Page
                 "INFO",
                 $"Data worker ready: Python {workerStatus.PythonVersion}, NumPy {workerStatus.NumpyVersion}; {_index.Runs.Count} run(s).");
             ApplyBackgroundStatus(App.Services.BackgroundSync.CurrentStatus);
-            if (_index.Runs.Count == 0)
+            if (!App.Services.CurrentSettings.FirstRunSetupCompleted
+                || !HasCompleteForecastSeries(_index))
             {
                 ShowFirstRunOverlay();
-                if (!string.IsNullOrWhiteSpace(FirstRunPasswordInput.Password))
-                {
-                    await ProbeFirstRunAsync();
-                }
             }
         }
         catch (Exception exception)
@@ -349,34 +346,42 @@ public sealed partial class MainPage : Page
             return;
         }
 
-        SetFirstRunBusy(true, "正在从最近 3 天寻找可用起报");
+        var model = GetFirstRunModel();
+        SetFirstRunBusy(true, $"正在寻找 {model} 最新起报");
         FirstRunInfo.IsOpen = false;
         try
         {
-            await App.Services.UpdateSettingsAsync(
-                App.Services.CurrentSettings with { DataAccessPassword = password });
-            var result = await App.Services.BackgroundSync.SyncNowAsync();
-            if (result is not null)
+            var result = await App.Services.BackgroundSync.PrepareFirstForecastAsync(
+                model,
+                password);
+            _index = result.Index;
+            ApplyIndex(result.Index, result.Model, result.InitKey);
+            if (result.IsComplete)
             {
-                _index = result;
-                ApplyIndex(result);
-                if (result.Runs.Count > 0)
-                {
-                    FirstRunStatusText.Text = $"已准备 {result.Runs.Count} 个预报时次";
-                    HideFirstRunOverlayIfReady(result);
-                    await App.Services.Log.WriteAsync(
-                        "INFO",
-                        $"First-run preparation completed with {result.Runs.Count} run(s).");
-                    return;
-                }
+                await App.Services.UpdateSettingsAsync(
+                    App.Services.CurrentSettings with
+                    {
+                        DataAccessPassword = password,
+                        FirstRunSetupCompleted = true,
+                    });
+                FirstRunStatusText.Text =
+                    $"{result.Model} 已准备 {result.AvailableRuns}/{result.ExpectedRuns} 个预报时次";
+                HideFirstRunOverlayIfReady(result.Index);
+                await App.Services.Log.WriteAsync(
+                    "INFO",
+                    $"First-run setup completed. model={result.Model}, init={result.InitKey}, runs={result.AvailableRuns}.");
+                return;
             }
 
             var status = App.Services.BackgroundSync.CurrentStatus;
-            FirstRunStatusText.Text = "暂未获得可用预报";
+            FirstRunStatusText.Text =
+                $"当前起报仅有 {result.AvailableRuns}/{result.ExpectedRuns} 个预报时次";
             ShowFirstRunMessage(
                 status.IsError
                     ? status.Message
-                    : "最近 3 天暂未发现可用起报。请检查网络与密码后重试，或导入本地 NetCDF。",
+                    : result.InitKey is null
+                        ? $"最近 3 天暂未发现 {result.Model} 可用起报，请检查网络与密码后重试。"
+                        : "完整序列尚未下载完成，请保持网络连接后重试；已有文件不会重复下载。",
                 status.IsError ? InfoBarSeverity.Error : InfoBarSeverity.Warning);
         }
         catch (Exception exception)
@@ -397,15 +402,7 @@ public sealed partial class MainPage : Page
         InfoBarSeverity severity = InfoBarSeverity.Informational)
     {
         FirstRunOverlay.Visibility = Visibility.Visible;
-        try
-        {
-            FirstRunPasswordInput.Password = App.Services.CurrentSettings.DataAccessPassword;
-        }
-        catch
-        {
-            // The overlay must stay usable even when service construction failed.
-        }
-        FirstRunStatusText.Text = "等待获取首个有效预报";
+        FirstRunStatusText.Text = "等待下载同一起报的 120 个预报时次";
         FirstRunProbeButton.IsEnabled =
             !string.IsNullOrWhiteSpace(FirstRunPasswordInput.Password);
         if (!string.IsNullOrWhiteSpace(message))
@@ -445,6 +442,7 @@ public sealed partial class MainPage : Page
     {
         _firstRunBusy = isBusy;
         FirstRunProgressRing.IsActive = isBusy;
+        FirstRunModelPicker.IsEnabled = !isBusy;
         FirstRunPasswordInput.IsEnabled = !isBusy;
         FirstRunProbeButton.IsEnabled =
             !isBusy && !string.IsNullOrWhiteSpace(FirstRunPasswordInput.Password);
@@ -457,7 +455,8 @@ public sealed partial class MainPage : Page
 
     private void HideFirstRunOverlayIfReady(ForecastIndex index)
     {
-        if (index.Runs.Count == 0)
+        if (!App.Services.CurrentSettings.FirstRunSetupCompleted
+            || !HasCompleteForecastSeries(index))
         {
             return;
         }
@@ -465,6 +464,23 @@ public sealed partial class MainPage : Page
         FirstRunOverlay.Visibility = Visibility.Collapsed;
         FirstRunInfo.IsOpen = false;
         FirstRunProgressRing.IsActive = false;
+    }
+
+    private string GetFirstRunModel() =>
+        (FirstRunModelPicker.SelectedItem as ComboBoxItem)?.Content?.ToString()
+        ?? "AISky-Energy";
+
+    private static bool HasCompleteForecastSeries(ForecastIndex index)
+    {
+        const int expectedRuns = 120;
+        return index.Runs
+            .GroupBy(run => new { run.Model, run.InitKey })
+            .Any(group =>
+            {
+                var leads = group.Select(run => run.LeadHours).ToHashSet();
+                return Enumerable.Range(1, expectedRuns)
+                    .All(item => leads.Contains(item * 3));
+            });
     }
 
     private async void SettingsButton_Click(object sender, RoutedEventArgs e)

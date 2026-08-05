@@ -5,6 +5,7 @@ namespace AISky_Desktop.Infrastructure;
 
 public sealed class AppServices
 {
+    private readonly object _initializationLock = new();
     private Task? _initialization;
 
     private AppServices(
@@ -41,7 +42,13 @@ public sealed class AppServices
             new PythonDataWorkerClient(paths));
     }
 
-    public Task InitializeAsync() => _initialization ??= InitializeCoreAsync();
+    public Task InitializeAsync()
+    {
+        lock (_initializationLock)
+        {
+            return _initialization ??= InitializeCoreAsync();
+        }
+    }
 
     private async Task InitializeCoreAsync()
     {

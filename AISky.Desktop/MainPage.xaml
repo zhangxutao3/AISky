@@ -781,7 +781,7 @@
                                 Foreground="{StaticResource AISkyDarkMutedTextBrush}"
                                 FontSize="15"
                                 LineHeight="23"
-                                Text="AISky 需要至少一个完整的本地 NetCDF 时次。输入数据访问密码后，软件会从最近 3 天自动寻找最新起报；也可以直接导入已有文件。"
+                                Text="选择预报模型并输入数据访问密码。AISky 会从最近 3 天寻找最新起报，完整下载未来 15 天的 120 个预报时次，全部校验通过后再进入地图。"
                                 TextWrapping="Wrap" />
                         </StackPanel>
 
@@ -809,10 +809,25 @@
                                     <TextBlock
                                         Foreground="{StaticResource AISkyDarkMutedTextBrush}"
                                         Style="{StaticResource CaptionTextBlockStyle}"
-                                        Text="默认使用 UTC，可在左上角“…”中切换显示时区" />
+                                        Text="下载期间保持此窗口开启；中断后可以继续重试" />
                                 </StackPanel>
                             </Grid>
                         </Border>
+
+                        <StackPanel Spacing="7">
+                            <TextBlock
+                                Foreground="White"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="首次加载模型" />
+                            <ComboBox
+                                x:Name="FirstRunModelPicker"
+                                MinHeight="44"
+                                AutomationProperties.Name="首次加载模型"
+                                SelectedIndex="0">
+                                <ComboBoxItem Content="AISky-Energy" />
+                                <ComboBoxItem Content="AISky-SDS" />
+                            </ComboBox>
+                        </StackPanel>
 
                         <StackPanel Spacing="7">
                             <TextBlock
@@ -846,9 +861,9 @@
                                 x:Name="FirstRunProbeButton"
                                 MinHeight="46"
                                 HorizontalAlignment="Stretch"
-                                AutomationProperties.Name="寻找最新预报"
+                                AutomationProperties.Name="下载完整预报并进入"
                                 Click="FirstRunProbeButton_Click"
-                                Content="寻找最新预报"
+                                Content="下载完整预报并进入"
                                 Style="{StaticResource AccentButtonStyle}" />
                             <Button
                                 x:Name="FirstRunImportButton"
@@ -862,7 +877,7 @@
                         <TextBlock
                             Foreground="{StaticResource AISkyDarkMutedTextBrush}"
                             Style="{StaticResource CaptionTextBlockStyle}"
-                            Text="数据将保存在本机；下载中断时会自动重试，不会把不完整文件加入索引。"
+                            Text="只有同一起报的 +3h 至 +360h 共 120 个文件全部可用时才会进入地图；不完整文件不会加入索引。"
                             TextWrapping="Wrap" />
                     </StackPanel>
                 </Border>
