@@ -56,6 +56,9 @@ public sealed record UpdateOptions
     [JsonPropertyName("assetNamePattern")]
     public string AssetNamePattern { get; init; } = "AISky-Desktop-win-x64.zip";
 
+    [JsonPropertyName("installerAssetNamePattern")]
+    public string InstallerAssetNamePattern { get; init; } = "AISky-Setup-win-x64.exe";
+
     [JsonPropertyName("apiBaseUrl")]
     public string ApiBaseUrl { get; init; } = "https://api.github.com";
 
@@ -72,6 +75,8 @@ public sealed record UpdateOptions
 
 public sealed class UpdateService
 {
+    private const string InstalledModeMarker = ".aisky-install.ini";
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -108,6 +113,9 @@ public sealed class UpdateService
     }
 
     public UpdateOptions Options => _options;
+
+    public bool IsInstallerManaged =>
+        File.Exists(Path.Combine(AppContext.BaseDirectory, InstalledModeMarker));
 
     public async Task<UpdateCheckResult> CheckAsync(
         CancellationToken cancellationToken = default)
@@ -177,14 +185,15 @@ public sealed class UpdateService
 
         if (release.Asset is null)
         {
+            var expectedAssetName = PreferredAssetName;
             await _log.WriteAsync(
                 "WARN",
-                $"Update {releaseVersion} is available but asset '{_options.AssetNamePattern}' is missing.");
+                $"Update {releaseVersion} is available but asset '{expectedAssetName}' is missing.");
             return new UpdateCheckResult(
                 UpdateAvailability.AssetMissing,
                 currentVersion,
                 release,
-                $"发现 {releaseVersion}，但 Release 中缺少 {_options.AssetNamePattern}。");
+                $"发现 {releaseVersion}，但 Release 中缺少 {expectedAssetName}。");
         }
 
         await _log.WriteAsync(
@@ -287,6 +296,11 @@ public sealed class UpdateService
             ?? throw new InvalidOperationException("无法启动更新安装助手。");
     }
 
+    private string PreferredAssetName =>
+        IsInstallerManaged
+            ? _options.InstallerAssetNamePattern
+            : _options.AssetNamePattern;
+
     private UpdateOptions LoadOptions()
     {
         var path = Path.Combine(AppContext.BaseDirectory, "Config", "update-config.json");
@@ -309,10 +323,11 @@ public sealed class UpdateService
 
     private UpdateAsset? SelectAsset(IReadOnlyList<GitHubAssetPayload> assets)
     {
+        var preferredAssetName = PreferredAssetName;
         var selected = assets.FirstOrDefault(asset =>
             string.Equals(
                 asset.Name,
-                _options.AssetNamePattern,
+                preferredAssetName,
                 StringComparison.OrdinalIgnoreCase));
         if (selected is null)
         {

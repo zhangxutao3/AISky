@@ -10,6 +10,8 @@ param(
     [string]$OutputDirectory = '',
     [string]$PythonArchivePath = '',
     [string]$PythonRuntimePath = '',
+    [string]$InstallerCompilerPath = '',
+    [switch]$SkipInstaller,
     [switch]$Upload
 )
 
@@ -30,6 +32,9 @@ $stageDirectory = Join-Path $OutputDirectory 'AISky-Desktop'
 $updaterDirectory = Join-Path $OutputDirectory '_updater'
 $archivePath = Join-Path $OutputDirectory 'AISky-Desktop-win-x64.zip'
 $hashPath = "$archivePath.sha256"
+$installerScript = Join-Path $workspaceRoot 'installer\AISky.iss'
+$installerPath = Join-Path $OutputDirectory 'AISky-Setup-win-x64.exe'
+$installerHashPath = "$installerPath.sha256"
 
 if (Test-Path -LiteralPath $OutputDirectory) {
     throw "输出目录已存在：$OutputDirectory`n为避免覆盖旧版本，请更换版本号或输出目录。"
@@ -190,6 +195,51 @@ Set-Content -LiteralPath $hashPath -Value "sha256:$hash  AISky-Desktop-win-x64.z
 Write-Host "发布包已生成：$archivePath"
 Write-Host "SHA-256：$hash"
 
+if (-not $SkipInstaller) {
+    if (-not (Test-Path -LiteralPath $installerScript)) {
+        throw "安装器脚本不存在：$installerScript"
+    }
+    if ([string]::IsNullOrWhiteSpace($InstallerCompilerPath)) {
+        $compilerCandidates = @(
+            (Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 7\ISCC.exe'),
+            (Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe'),
+            (Join-Path $env:ProgramFiles 'Inno Setup 7\ISCC.exe'),
+            (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe')
+        )
+        $InstallerCompilerPath = $compilerCandidates |
+            Where-Object { Test-Path -LiteralPath $_ } |
+            Select-Object -First 1
+    }
+    if ([string]::IsNullOrWhiteSpace($InstallerCompilerPath) `
+        -or -not (Test-Path -LiteralPath $InstallerCompilerPath)) {
+        throw @'
+没有找到 Inno Setup 命令行编译器 ISCC.exe。
+请安装 Inno Setup 7，或使用 -InstallerCompilerPath 指定 ISCC.exe；
+仅生成便携版时可显式传入 -SkipInstaller。
+'@
+    }
+
+    Write-Host "正在生成每用户安装器..."
+    & $InstallerCompilerPath `
+        '/Qp' `
+        "/DMyAppVersion=$Version" `
+        "/DSourceDir=$stageDirectory" `
+        "/DOutputDir=$OutputDirectory" `
+        $installerScript
+    if ($LASTEXITCODE -ne 0) {
+        throw 'AISky 安装器生成失败。'
+    }
+    if (-not (Test-Path -LiteralPath $installerPath)) {
+        throw "安装器编译成功，但没有找到输出：$installerPath"
+    }
+    $installerHash = (Get-FileHash -LiteralPath $installerPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    Set-Content -LiteralPath $installerHashPath `
+        -Value "sha256:$installerHash  AISky-Setup-win-x64.exe" `
+        -Encoding ASCII
+    Write-Host "安装器已生成：$installerPath"
+    Write-Host "安装器 SHA-256：$installerHash"
+}
+
 if (-not $Upload) {
     return
 }
@@ -208,9 +258,13 @@ gh auth status | Out-Null
 if ($LASTEXITCODE -ne 0) {
     throw 'GitHub CLI 尚未登录，请先运行 gh auth login。'
 }
+$releaseAssets = @($archivePath, $hashPath)
+if (-not $SkipInstaller) {
+    $releaseAssets += $installerPath
+    $releaseAssets += $installerHashPath
+}
 gh release create "v$Version" `
-    $archivePath `
-    $hashPath `
+    @releaseAssets `
     --repo $Repository `
     --title $ReleaseTitle `
     --notes-file $NotesFile `

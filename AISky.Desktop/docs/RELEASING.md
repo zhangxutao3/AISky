@@ -1,8 +1,8 @@
 # AISky 发布与更新指南
 
-AISky 当前采用“Windows x64 绿色免安装包”发布方式。发布包已经包含 .NET 与
-Windows App SDK 与 Python/NetCDF 数据运行时，用户解压后可直接运行
-`AISky.Desktop.exe`。
+AISky 同时发布“Windows x64 每用户安装器”和绿色免安装包。两个包均已包含 .NET、
+Windows App SDK 与 Python/NetCDF 数据运行时。普通用户优先使用
+`AISky-Setup-win-x64.exe`，便携使用时再选择 ZIP。
 
 ## 第一次配置更新仓库
 
@@ -17,7 +17,7 @@ gh auth login
 源码中的 `Config/update-config.json` 可以保持空白。发布脚本收到
 `-Repository owner/repo` 后，会只修改发布包内的配置，不会改乱源码。
 
-## 只生成绿色发布包
+## 生成安装版和绿色发布包
 
 在 `AISky.Desktop` 目录运行：
 
@@ -30,10 +30,13 @@ gh auth login
 输出位于：
 
 ```text
+..\artifacts\v0.7.0\AISky-Setup-win-x64.exe
 ..\artifacts\v0.7.0\AISky-Desktop-win-x64.zip
 ```
 
-同目录还会生成 `.sha256` 校验文件。脚本拒绝覆盖已经存在的版本目录，避免误删旧包。
+同目录还会分别生成 `.sha256` 校验文件。安装器编译需要 Inno Setup 6.7+ 或 7；可以用
+`-InstallerCompilerPath` 指定 `ISCC.exe`。只有明确需要便携包时，才使用
+`-SkipInstaller` 跳过安装器。脚本拒绝覆盖已经存在的版本目录，避免误删旧包。
 
 网络不稳定时，可以复用之前成功发布时保存的同版本 Python 嵌入包：
 
@@ -78,20 +81,21 @@ gh auth login
 脚本会：
 
 1. 发布 AISky 主程序和独立更新助手。
-2. 生成名称固定的 `AISky-Desktop-win-x64.zip`。
-3. 计算 SHA-256。
+2. 生成名称固定的 `AISky-Setup-win-x64.exe` 和 `AISky-Desktop-win-x64.zip`。
+3. 分别计算 SHA-256。
 4. 创建 `v0.6.1` GitHub Release。
-5. 上传压缩包和校验文件，并标记为最新版本。
+5. 上传安装器、压缩包和校验文件，并标记为最新版本。
 
 ## 用户端更新流程
 
-用户点击“检查软件更新”后，AISky 会读取最新正式 Release。发现新版本时显示版本号、
-UTC 发布时间、更新说明和下载大小。下载完成后先校验文件大小及 GitHub 提供的
-SHA-256，再启动独立更新助手。
+用户点击“检查软件更新”后，AISky 会读取最新正式 Release。安装版选择
+`AISky-Setup-win-x64.exe`，便携版选择 `AISky-Desktop-win-x64.zip`。发现新版本时
+显示版本号、UTC 发布时间、更新说明和下载大小。下载完成后先校验文件大小及 GitHub
+提供的 SHA-256，再启动独立更新助手。
 
-更新助手会等待 AISky 完全退出，将旧程序目录改名为带时间戳的备份目录，再放入新版本。
-如果替换失败且旧目录已经移动，会自动恢复旧版本。用户的 NetCDF、索引、设置和日志均在
-`%LOCALAPPDATA%\AISky\Desktop`，不在程序目录中，因此升级不会覆盖这些数据。
+安装版由更新助手等待 AISky 完全退出后静默运行安装器，更新快捷方式和卸载信息，再重启
+AISky。便携版继续使用失败可恢复的目录替换。用户的 NetCDF、索引、设置和日志均在
+AISky 数据目录中，不在程序目录内，因此两种升级均不会覆盖这些数据。
 
 ## 版本号规则
 
@@ -101,5 +105,6 @@ SHA-256，再启动独立更新助手。
 - `0.7.0`：加入一组新功能。
 - `1.0.0`：首个正式稳定版本。
 
-GitHub 标签请使用 `v0.6.1`，Release 压缩包名称保持
-`AISky-Desktop-win-x64.zip`，否则客户端会提示找不到 Windows 更新包。
+GitHub 标签请使用 `v0.6.1`。Release 资产名称必须保持
+`AISky-Setup-win-x64.exe` 和 `AISky-Desktop-win-x64.zip`，否则对应版本的客户端
+会提示找不到 Windows 更新包。

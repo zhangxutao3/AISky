@@ -17,7 +17,7 @@ internal static class Program
         {
             var options = ParseArguments(args);
             var processId = ReadInteger(options, "--wait-pid");
-            var package = RequireFile(options, "--package", ".zip");
+            var package = RequirePackage(options, "--package");
             var target = RequireDirectory(options, "--target");
             var executableName = RequireFileName(options, "--executable");
             ApplyUpdate(processId, package, target, executableName);
@@ -43,6 +43,12 @@ internal static class Program
     {
         WriteLog($"开始更新。package={package}; target={target}; pid={processId}");
         WaitForProcess(processId);
+        if (Path.GetExtension(package).Equals(".exe", StringComparison.OrdinalIgnoreCase))
+        {
+            ApplyInstallerUpdate(package, target, executableName);
+            return;
+        }
+
         var targetDirectory = new DirectoryInfo(target);
         var parent = targetDirectory.Parent?.FullName
             ?? throw new InvalidOperationException("程序目录没有有效的父目录。");
@@ -81,6 +87,45 @@ internal static class Program
             }
             throw;
         }
+    }
+
+    private static void ApplyInstallerUpdate(
+        string package,
+        string target,
+        string executableName)
+    {
+        WriteLog("检测到安装版更新包，正在执行静默升级。");
+        using var installer = Process.Start(new ProcessStartInfo
+        {
+            FileName = package,
+            UseShellExecute = true,
+            Arguments =
+                $"/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS " +
+                $"/DIR=\"{target}\"",
+        }) ?? throw new InvalidOperationException("无法启动 AISky 安装程序。");
+        if (!installer.WaitForExit(10 * 60 * 1000))
+        {
+            throw new TimeoutException("AISky 安装程序没有在 10 分钟内完成。");
+        }
+        if (installer.ExitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"AISky 安装程序返回错误代码 {installer.ExitCode}。");
+        }
+
+        var updatedExecutable = Path.Combine(target, executableName);
+        if (!File.Exists(updatedExecutable))
+        {
+            throw new InvalidOperationException(
+                $"安装完成后没有找到主程序 {executableName}。");
+        }
+        _ = Process.Start(new ProcessStartInfo
+        {
+            FileName = updatedExecutable,
+            UseShellExecute = true,
+            WorkingDirectory = target,
+        }) ?? throw new InvalidOperationException("新版本安装完成，但无法重新启动。");
+        WriteLog("安装版静默升级完成。");
     }
 
     private static void WaitForProcess(int processId)
@@ -170,16 +215,20 @@ internal static class Program
             ? result
             : throw new ArgumentException($"缺少参数 {name}。");
 
-    private static string RequireFile(
+    private static string RequirePackage(
         IReadOnlyDictionary<string, string> values,
-        string name,
-        string extension)
+        string name)
     {
         if (!values.TryGetValue(name, out var value)
-            || !File.Exists(value)
-            || !Path.GetExtension(value).Equals(extension, StringComparison.OrdinalIgnoreCase))
+            || !File.Exists(value))
         {
             throw new ArgumentException($"{name} 指向的更新包无效。");
+        }
+        var extension = Path.GetExtension(value);
+        if (!extension.Equals(".zip", StringComparison.OrdinalIgnoreCase)
+            && !extension.Equals(".exe", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException($"{name} 必须是 ZIP 或 EXE 更新包。");
         }
         return Path.GetFullPath(value);
     }

@@ -28,8 +28,8 @@ dotnet build .\AISky.Desktop.csproj -c Debug -p:Platform=x64
 python -m pip install -r .\DataWorker\requirements.txt
 ```
 
-正式绿色发布包已经内置 Python、NumPy、netCDF4 和 requests，普通用户无需安装
-Python 或 Windows App SDK，解压后直接运行即可。
+正式安装版和绿色发布包均已内置 Python、NumPy、netCDF4 和 requests，普通用户无需
+安装 Python 或 Windows App SDK。
 
 程序默认使用 UTC 显示起报和预报时刻；可在“更多 → 显示时区”统一切换为
 UTC+8 等显示时区，原始数据仍按 UTC 保存。
@@ -55,7 +55,7 @@ UTC+8 等显示时区，原始数据仍按 UTC 保存。
 - 软件版本号、GitHub Release 更新检查、发布说明和下载大小展示
 - 更新包流式下载、文件大小与 SHA-256 校验，以及失败可恢复的独立更新助手
 - 可选的登录 Windows 后在通知区启动
-- 一键生成绿色免安装包并通过 GitHub CLI 创建 Release 的发布脚本
+- 一键生成每用户安装器和绿色免安装包，并通过 GitHub CLI 创建 Release 的发布脚本
 - 游戏启动界面式首次封面、120 时次初始化进度，以及可选的数据访问密码
 - 下载断线自动重试、损坏 NetCDF 隔离、损坏 SQLite 自动备份重建
 - 内置数据运行时，发布包不再依赖电脑预装 Python
@@ -81,8 +81,8 @@ UTC+8 等显示时区，原始数据仍按 UTC 保存。
 
 当前程序版本为 `0.8.4`，更新源为
 [`zhangxutao3/AISky`](https://github.com/zhangxutao3/AISky)。
-点击“检查软件更新”会读取该仓库的最新 GitHub Release，并匹配
-`AISky-Desktop-win-x64.zip` 更新包。发布新版本请参考
+点击“检查软件更新”会读取该仓库的最新 GitHub Release；安装版匹配
+`AISky-Setup-win-x64.exe`，便携版匹配 `AISky-Desktop-win-x64.zip`。发布新版本请参考
 [`docs/RELEASING.md`](docs/RELEASING.md)。
 
 普通用户请阅读 [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md)，测试结果见

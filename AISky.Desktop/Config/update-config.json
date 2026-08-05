@@ -2,5 +2,6 @@
   "repositoryOwner": "zhangxutao3",
   "repositoryName": "AISky",
   "assetNamePattern": "AISky-Desktop-win-x64.zip",
+  "installerAssetNamePattern": "AISky-Setup-win-x64.exe",
   "apiBaseUrl": "https://api.github.com"
 }
