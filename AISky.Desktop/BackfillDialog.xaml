@@ -64,11 +64,11 @@
 
         <PasswordBox
             x:Name="PasswordInput"
-            AutomationProperties.Name="数据访问密码"
-            Header="访问密码"
+            AutomationProperties.Name="数据访问密码，可选"
+            Header="访问密码（可选）"
             MaxLength="128"
             PasswordRevealMode="Peek"
-            PlaceholderText="请输入数据分享页访问密码" />
+            PlaceholderText="公开数据可留空" />
 
         <StackPanel x:Name="ProgressArea" Spacing="8" Visibility="Collapsed">
             <Grid>

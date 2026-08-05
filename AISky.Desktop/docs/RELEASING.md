@@ -49,7 +49,7 @@ gh auth login
 
 ```powershell
 .\scripts\Publish-AISky.ps1 `
-  -Version 0.8.1 `
+  -Version 0.8.2 `
   -Repository my-name/aisky-desktop `
   -PythonRuntimePath ..\artifacts\release-smoke-v0.8.0-final\Python
 ```

@@ -72,8 +72,11 @@
                         <Setter Target="TopChrome.Margin" Value="8,20,8,0" />
                         <Setter Target="TimelinePanel.Margin" Value="8,0,8,8" />
                         <Setter Target="TimelineCaption.Visibility" Value="Collapsed" />
-                        <Setter Target="FirstRunCard.Width" Value="340" />
-                        <Setter Target="FirstRunCard.Padding" Value="22" />
+                        <Setter Target="FirstRunCard.Width" Value="350" />
+                        <Setter Target="FirstRunBrandPanel.Visibility" Value="Collapsed" />
+                        <Setter Target="FirstRunBrandPanel.Width" Value="0" />
+                        <Setter Target="FirstRunCompactBrand.Visibility" Value="Visible" />
+                        <Setter Target="FirstRunSetupPanel.Padding" Value="22" />
                     </VisualState.Setters>
                 </VisualState>
                 <VisualState x:Name="Medium">
@@ -94,8 +97,11 @@
                         <Setter Target="TopChrome.Margin" Value="12,20,12,0" />
                         <Setter Target="TimelinePanel.Margin" Value="12,0,12,12" />
                         <Setter Target="TimelineCaption.Visibility" Value="Visible" />
-                        <Setter Target="FirstRunCard.Width" Value="520" />
-                        <Setter Target="FirstRunCard.Padding" Value="30" />
+                        <Setter Target="FirstRunCard.Width" Value="860" />
+                        <Setter Target="FirstRunBrandPanel.Visibility" Value="Visible" />
+                        <Setter Target="FirstRunBrandPanel.Width" Value="330" />
+                        <Setter Target="FirstRunCompactBrand.Visibility" Value="Collapsed" />
+                        <Setter Target="FirstRunSetupPanel.Padding" Value="30" />
                     </VisualState.Setters>
                 </VisualState>
                 <VisualState x:Name="Wide">
@@ -116,8 +122,11 @@
                         <Setter Target="TopChrome.Margin" Value="18,20,18,0" />
                         <Setter Target="TimelinePanel.Margin" Value="18,0,18,16" />
                         <Setter Target="TimelineCaption.Visibility" Value="Visible" />
-                        <Setter Target="FirstRunCard.Width" Value="560" />
-                        <Setter Target="FirstRunCard.Padding" Value="34" />
+                        <Setter Target="FirstRunCard.Width" Value="1080" />
+                        <Setter Target="FirstRunBrandPanel.Visibility" Value="Visible" />
+                        <Setter Target="FirstRunBrandPanel.Width" Value="430" />
+                        <Setter Target="FirstRunCompactBrand.Visibility" Value="Collapsed" />
+                        <Setter Target="FirstRunSetupPanel.Padding" Value="38" />
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
@@ -739,147 +748,316 @@
 
         <Grid
             x:Name="FirstRunOverlay"
-            Background="#F51A343D"
             Visibility="Collapsed">
+            <Grid.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                    <GradientStop Offset="0" Color="#FF061A29" />
+                    <GradientStop Offset="0.42" Color="#FF0A3443" />
+                    <GradientStop Offset="0.76" Color="#FF0B5660" />
+                    <GradientStop Offset="1" Color="#FF102C3A" />
+                </LinearGradientBrush>
+            </Grid.Background>
+
+            <Rectangle IsHitTestVisible="False">
+                <Rectangle.Fill>
+                    <LinearGradientBrush StartPoint="0,1" EndPoint="1,0">
+                        <GradientStop Offset="0" Color="#0016AFC2" />
+                        <GradientStop Offset="0.54" Color="#1C35C5CE" />
+                        <GradientStop Offset="1" Color="#004DCEB5" />
+                    </LinearGradientBrush>
+                </Rectangle.Fill>
+            </Rectangle>
+
+            <!-- Layered sky-light geometry keeps the cover atmospheric without adding copy. -->
+            <Ellipse
+                Width="860"
+                Height="860"
+                Margin="-330,0,0,-430"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Bottom"
+                IsHitTestVisible="False"
+                Stroke="#2257D7D0"
+                StrokeThickness="2" />
+            <Ellipse
+                Width="680"
+                Height="680"
+                Margin="0,-340,-210,0"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Top"
+                IsHitTestVisible="False"
+                Stroke="#2C77E5D6"
+                StrokeThickness="2" />
+            <Ellipse
+                Width="440"
+                Height="440"
+                Margin="0,-225,-80,0"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Top"
+                IsHitTestVisible="False">
+                <Ellipse.Fill>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                        <GradientStop Offset="0" Color="#24F3D37A" />
+                        <GradientStop Offset="0.55" Color="#1457D7D0" />
+                        <GradientStop Offset="1" Color="#0035C5CE" />
+                    </LinearGradientBrush>
+                </Ellipse.Fill>
+            </Ellipse>
+            <Ellipse
+                Width="600"
+                Height="240"
+                Margin="0,0,120,-130"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Bottom"
+                Fill="#0F4DCEB5"
+                IsHitTestVisible="False" />
+
             <ScrollViewer
                 HorizontalScrollBarVisibility="Disabled"
                 VerticalScrollBarVisibility="Auto"
                 VerticalScrollMode="Auto">
                 <Border
                     x:Name="FirstRunCard"
-                    Width="560"
-                    Margin="16,32"
-                    Padding="34"
+                    Width="1080"
+                    Margin="16,28"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
                     AutomationProperties.Name="首次数据准备"
-                    Background="#FA112A33"
-                    BorderBrush="#3DFFFFFF"
+                    Background="#E6102A35"
+                    BorderBrush="#52BDEAF0"
                     BorderThickness="1"
-                    CornerRadius="22">
-                    <StackPanel Spacing="18">
-                        <Border
-                            Width="58"
-                            Height="58"
-                            HorizontalAlignment="Left"
-                            Background="#2632C3D6"
-                            CornerRadius="18">
-                            <FontIcon
-                                Foreground="{StaticResource AISkyAccentBrightBrush}"
-                                FontSize="27"
-                                Glyph="&#xE895;" />
-                        </Border>
+                    CornerRadius="28">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
 
-                        <StackPanel Spacing="7">
-                            <TextBlock
-                                Foreground="White"
-                                FontSize="28"
-                                FontWeight="SemiBold"
-                                Text="准备你的第一份预报"
-                                TextWrapping="Wrap" />
-                            <TextBlock
-                                Foreground="{StaticResource AISkyDarkMutedTextBrush}"
-                                FontSize="15"
-                                LineHeight="23"
-                                Text="选择预报模型并输入数据访问密码。AISky 会从最近 3 天寻找最新起报，完整下载未来 15 天的 120 个预报时次，全部校验通过后再进入地图。"
-                                TextWrapping="Wrap" />
-                        </StackPanel>
+                        <Grid
+                            x:Name="FirstRunBrandPanel"
+                            Width="430"
+                            Padding="42">
+                            <Grid.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Offset="0" Color="#D7071D2A" />
+                                    <GradientStop Offset="1" Color="#B70B4551" />
+                                </LinearGradientBrush>
+                            </Grid.Background>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
 
-                        <Border
-                            Padding="14,12"
-                            Background="#12FFFFFF"
-                            CornerRadius="10">
-                            <Grid ColumnSpacing="11">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <ProgressRing
-                                    x:Name="FirstRunProgressRing"
-                                    Width="22"
-                                    Height="22"
-                                    Foreground="{StaticResource AISkyAccentBrightBrush}"
-                                    IsActive="False" />
-                                <StackPanel Grid.Column="1" Spacing="2">
+                            <Border
+                                Width="112"
+                                Height="112"
+                                HorizontalAlignment="Left"
+                                Background="White"
+                                CornerRadius="28">
+                                <Image
+                                    Margin="4"
+                                    AutomationProperties.Name="AISky 标志"
+                                    Source="ms-appx:///Assets/AppIcon.png"
+                                    Stretch="Uniform" />
+                            </Border>
+
+                            <StackPanel
+                                Grid.Row="1"
+                                VerticalAlignment="Center"
+                                Spacing="8">
+                                <StackPanel Spacing="7">
                                     <TextBlock
-                                        x:Name="FirstRunStatusText"
                                         Foreground="White"
-                                        Style="{StaticResource BodyStrongTextBlockStyle}"
-                                        Text="等待开始" />
+                                        FontSize="46"
+                                        FontWeight="SemiBold"
+                                        Text="AISky" />
                                     <TextBlock
+                                        MaxWidth="330"
                                         Foreground="{StaticResource AISkyDarkMutedTextBrush}"
-                                        Style="{StaticResource CaptionTextBlockStyle}"
-                                        Text="下载期间保持此窗口开启；中断后可以继续重试" />
+                                        FontSize="17"
+                                        LineHeight="26"
+                                        Text="智慧气象桌面平台"
+                                        TextWrapping="Wrap" />
                                 </StackPanel>
-                            </Grid>
-                        </Border>
-
-                        <StackPanel Spacing="7">
-                            <TextBlock
-                                Foreground="White"
-                                Style="{StaticResource CaptionTextBlockStyle}"
-                                Text="首次加载模型" />
-                            <ComboBox
-                                x:Name="FirstRunModelPicker"
-                                MinHeight="44"
-                                AutomationProperties.Name="首次加载模型"
-                                SelectedIndex="0">
-                                <ComboBoxItem Content="AISky-Energy" />
-                                <ComboBoxItem Content="AISky-SDS" />
-                            </ComboBox>
-                        </StackPanel>
-
-                        <StackPanel Spacing="7">
-                            <TextBlock
-                                Foreground="White"
-                                Style="{StaticResource CaptionTextBlockStyle}"
-                                Text="数据访问密码" />
-                            <PasswordBox
-                                x:Name="FirstRunPasswordInput"
-                                MinHeight="44"
-                                AutomationProperties.Name="数据访问密码"
-                                MaxLength="128"
-                                PasswordChanged="FirstRunPasswordInput_PasswordChanged"
-                                PasswordRevealMode="Peek"
-                                PlaceholderText="请输入服务器访问密码" />
-                        </StackPanel>
-
-                        <InfoBar
-                            x:Name="FirstRunInfo"
-                            IsClosable="False"
-                            IsOpen="False"
-                            Message=""
-                            Severity="Informational"
-                            Title="提示" />
-
-                        <Grid ColumnSpacing="10">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <Button
-                                x:Name="FirstRunProbeButton"
-                                MinHeight="46"
-                                HorizontalAlignment="Stretch"
-                                AutomationProperties.Name="下载完整预报并进入"
-                                Click="FirstRunProbeButton_Click"
-                                Content="下载完整预报并进入"
-                                Style="{StaticResource AccentButtonStyle}" />
-                            <Button
-                                x:Name="FirstRunImportButton"
-                                Grid.Column="1"
-                                MinHeight="46"
-                                AutomationProperties.Name="导入本地 NetCDF"
-                                Click="FirstRunImportButton_Click"
-                                Content="导入本地 NetCDF" />
+                            </StackPanel>
                         </Grid>
 
-                        <TextBlock
-                            Foreground="{StaticResource AISkyDarkMutedTextBrush}"
-                            Style="{StaticResource CaptionTextBlockStyle}"
-                            Text="只有同一起报的 +3h 至 +360h 共 120 个文件全部可用时才会进入地图；不完整文件不会加入索引。"
-                            TextWrapping="Wrap" />
-                    </StackPanel>
+                        <Border
+                            x:Name="FirstRunSetupPanel"
+                            Grid.Column="1"
+                            Padding="38">
+                            <StackPanel Spacing="16">
+                                <StackPanel
+                                    x:Name="FirstRunCompactBrand"
+                                    Orientation="Horizontal"
+                                    Spacing="10"
+                                    Visibility="Collapsed">
+                                    <Border
+                                        Width="42"
+                                        Height="42"
+                                        Background="White"
+                                        CornerRadius="12">
+                                        <Image
+                                            Margin="2"
+                                            AutomationProperties.Name="AISky 标志"
+                                            Source="ms-appx:///Assets/AppIcon.png"
+                                            Stretch="Uniform" />
+                                    </Border>
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        Foreground="White"
+                                        FontSize="22"
+                                        FontWeight="SemiBold"
+                                        Text="AISky" />
+                                </StackPanel>
+
+                                <StackPanel Spacing="6">
+                                    <TextBlock
+                                        Foreground="White"
+                                        FontSize="27"
+                                        FontWeight="SemiBold"
+                                        Text="初始化预报数据"
+                                        TextWrapping="Wrap" />
+                                    <TextBlock
+                                        Foreground="{StaticResource AISkyDarkMutedTextBrush}"
+                                        FontSize="14"
+                                        LineHeight="22"
+                                        Text="选择模型并准备最近一组完整预报。"
+                                        TextWrapping="Wrap" />
+                                </StackPanel>
+
+                                <StackPanel Spacing="7">
+                                    <TextBlock
+                                        Foreground="White"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        Text="首次加载模型" />
+                                    <ComboBox
+                                        x:Name="FirstRunModelPicker"
+                                        MinHeight="44"
+                                        HorizontalAlignment="Stretch"
+                                        AutomationProperties.Name="首次加载模型"
+                                        SelectedIndex="0">
+                                        <ComboBoxItem Content="AISky-Energy" />
+                                        <ComboBoxItem Content="AISky-SDS" />
+                                    </ComboBox>
+                                </StackPanel>
+
+                                <StackPanel Spacing="7">
+                                    <TextBlock
+                                        Foreground="White"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        Text="数据访问密码（可选）" />
+                                    <PasswordBox
+                                        x:Name="FirstRunPasswordInput"
+                                        MinHeight="44"
+                                        AutomationProperties.Name="数据访问密码，可选"
+                                        MaxLength="128"
+                                        PasswordRevealMode="Peek"
+                                        PlaceholderText="请输入访问密码，可留空尝试" />
+                                </StackPanel>
+
+                                <Border
+                                    Padding="15,13"
+                                    Background="#18FFFFFF"
+                                    BorderBrush="#23FFFFFF"
+                                    BorderThickness="1"
+                                    CornerRadius="12">
+                                    <StackPanel Spacing="10">
+                                        <Grid ColumnSpacing="10">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <ProgressRing
+                                                x:Name="FirstRunProgressRing"
+                                                Width="20"
+                                                Height="20"
+                                                Foreground="{StaticResource AISkyAccentBrightBrush}"
+                                                IsActive="False" />
+                                            <TextBlock
+                                                x:Name="FirstRunStatusText"
+                                                Grid.Column="1"
+                                                Foreground="White"
+                                                Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                Text="等待开始初始化"
+                                                TextTrimming="CharacterEllipsis" />
+                                            <TextBlock
+                                                x:Name="FirstRunProgressValueText"
+                                                Grid.Column="2"
+                                                Foreground="{StaticResource AISkyAccentBrightBrush}"
+                                                FontWeight="SemiBold"
+                                                Text="0%" />
+                                        </Grid>
+
+                                        <ProgressBar
+                                            x:Name="FirstRunProgressBar"
+                                            Height="5"
+                                            AutomationProperties.Name="首次预报初始化进度"
+                                            Foreground="{StaticResource AISkyAccentBrightBrush}"
+                                            Maximum="100"
+                                            Minimum="0"
+                                            Value="0" />
+
+                                        <Grid ColumnSpacing="12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock
+                                                x:Name="FirstRunProgressCountText"
+                                                Foreground="White"
+                                                Style="{StaticResource CaptionTextBlockStyle}"
+                                                Text="0 / 120 个时次" />
+                                            <TextBlock
+                                                x:Name="FirstRunTransferText"
+                                                Grid.Column="1"
+                                                HorizontalAlignment="Right"
+                                                Foreground="{StaticResource AISkyDarkMutedTextBrush}"
+                                                Style="{StaticResource CaptionTextBlockStyle}"
+                                                Text="选择模型后即可开始"
+                                                TextTrimming="CharacterEllipsis" />
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+
+                                <InfoBar
+                                    x:Name="FirstRunInfo"
+                                    IsClosable="False"
+                                    IsOpen="False"
+                                    Message=""
+                                    Severity="Informational"
+                                    Title="提示" />
+
+                                <Grid ColumnSpacing="10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Button
+                                        x:Name="FirstRunProbeButton"
+                                        MinHeight="46"
+                                        HorizontalAlignment="Stretch"
+                                        AutomationProperties.Name="开始初始化并进入"
+                                        Click="FirstRunProbeButton_Click"
+                                        Content="开始初始化并进入"
+                                        Style="{StaticResource AccentButtonStyle}" />
+                                    <Button
+                                        x:Name="FirstRunImportButton"
+                                        Grid.Column="1"
+                                        MinHeight="46"
+                                        AutomationProperties.Name="导入本地 NetCDF"
+                                        Click="FirstRunImportButton_Click"
+                                        Content="导入本地 NetCDF" />
+                                </Grid>
+
+                                <TextBlock
+                                    Foreground="{StaticResource AISkyDarkMutedTextBrush}"
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    Text="同一起报的 +3h 至 +360h 共 120 个文件全部可用后，AISky 才会进入地图。"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
                 </Border>
             </ScrollViewer>
         </Grid>

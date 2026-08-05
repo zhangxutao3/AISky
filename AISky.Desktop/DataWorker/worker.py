@@ -48,7 +48,11 @@ FILE_RE = re.compile(
 )
 
 BASE_URLS = {
-    "AISky-Energy": "https://obs.cstcloud.cn/s/share/aisky-energy/aisky-energy/forecast_data/",
+    # AISky-Energy exposes public direct file URLs.  Using the /s/share/
+    # password form makes a missing forecast look like an authentication
+    # failure, so keep the public route even when the caller supplied a
+    # password.
+    "AISky-Energy": "https://obs.cstcloud.cn/s/aisky-energy/aisky-energy/forecast_data/",
     "AISky-SDS": "https://obs.cstcloud.cn/s/aisky-sds/aisky-sds/forecast_data/",
 }
 
@@ -856,7 +860,19 @@ def run_download_range(args: argparse.Namespace) -> dict[str, Any]:
             # therefore exactly 120 files for the full range: +3h, +6h, ... +360h.
             minimum_lead = max(3, args.min_lead_hours)
             minimum_lead += (-minimum_lead) % 3
-            for lead in range(minimum_lead, args.max_lead_hours + 1, 3):
+            leads = list(range(minimum_lead, args.max_lead_hours + 1, 3))
+            report_file_progress = getattr(args, "report_file_progress", True)
+            for lead_index, lead in enumerate(leads, start=1):
+                if report_file_progress:
+                    emit(
+                        "progress",
+                        operation="download",
+                        stage="file",
+                        currentItem=lead_index,
+                        totalItems=len(leads),
+                        percent=round((lead_index - 1) / max(1, len(leads)) * 100, 1),
+                        message=f"正在准备第 {lead_index}/{len(leads)} 个预报时次",
+                    )
                 forecast_time = init_time + timedelta(hours=lead)
                 forecast_key = forecast_time.strftime(UTC_FORMAT)
                 existing_target = (
@@ -996,6 +1012,16 @@ def run_download_range(args: argparse.Namespace) -> dict[str, Any]:
                     break
                 if not locked_version and consecutive_missing >= 4:
                     break
+                if report_file_progress:
+                    emit(
+                        "progress",
+                        operation="download",
+                        stage="file-complete",
+                        currentItem=lead_index,
+                        totalItems=len(leads),
+                        percent=round(lead_index / max(1, len(leads)) * 100, 1),
+                        message=f"已处理 {lead_index}/{len(leads)} 个预报时次",
+                    )
 
     return {
         "operation": "download-range",
@@ -1027,6 +1053,7 @@ def run_sync_latest(args: argparse.Namespace) -> dict[str, Any]:
         probe_args.start = init_key
         probe_args.end = init_key
         probe_args.max_lead_hours = 3
+        probe_args.report_file_progress = False
         probe = run_download_range(probe_args)
         for name in totals:
             totals[name] += int(probe[name])
@@ -1057,6 +1084,7 @@ def run_sync_latest(args: argparse.Namespace) -> dict[str, Any]:
     full_args = argparse.Namespace(**vars(args))
     full_args.start = found_init
     full_args.end = found_init
+    full_args.report_file_progress = True
     full = run_download_range(full_args)
     for name in totals:
         totals[name] += int(full[name])

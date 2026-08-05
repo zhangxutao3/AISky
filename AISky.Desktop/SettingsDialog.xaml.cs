@@ -46,16 +46,6 @@ public sealed partial class SettingsDialog : ContentDialog
         ContentDialog sender,
         ContentDialogClosingEventArgs args)
     {
-        if (args.Result == ContentDialogResult.Primary
-            && AutoSyncToggle.IsOn
-            && string.IsNullOrWhiteSpace(DataAccessPasswordInput.Password))
-        {
-            args.Cancel = true;
-            CredentialInfo.IsOpen = true;
-            DataAccessPasswordInput.Focus(FocusState.Programmatic);
-            return;
-        }
-
         CredentialInfo.IsOpen = false;
     }
 

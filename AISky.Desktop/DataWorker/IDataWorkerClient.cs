@@ -43,7 +43,9 @@ public sealed record DataWorkerProgress(
     double? Percent,
     long? BytesReceived,
     long? TotalBytes,
-    bool IsWarning = false);
+    bool IsWarning = false,
+    int? CurrentItem = null,
+    int? TotalItems = null);
 
 public sealed record DownloadRangeRequest(
     string Model,
@@ -457,7 +459,9 @@ public sealed class PythonDataWorkerClient(AppPaths paths) : IDataWorkerClient
                     ReadDouble(root, "percent"),
                     ReadLong(root, "bytesReceived"),
                     ReadLong(root, "totalBytes"),
-                    type == "warning"));
+                    type == "warning",
+                    ReadInt(root, "currentItem"),
+                    ReadInt(root, "totalItems")));
             }
             else if (type == "error")
             {
@@ -523,5 +527,10 @@ public sealed class PythonDataWorkerClient(AppPaths paths) : IDataWorkerClient
     private static long? ReadLong(JsonElement root, string name) =>
         root.TryGetProperty(name, out var node) && node.ValueKind == JsonValueKind.Number
             ? node.GetInt64()
+            : null;
+
+    private static int? ReadInt(JsonElement root, string name) =>
+        root.TryGetProperty(name, out var node) && node.ValueKind == JsonValueKind.Number
+            ? node.GetInt32()
             : null;
 }

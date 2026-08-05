@@ -264,6 +264,7 @@ public sealed class BackgroundSyncService(
     public async Task<FirstForecastPreparationResult> PrepareFirstForecastAsync(
         string model,
         string password,
+        IProgress<DataWorkerProgress>? preparationProgress = null,
         CancellationToken cancellationToken = default)
     {
         const int forecastHours = 360;
@@ -287,9 +288,12 @@ public sealed class BackgroundSyncService(
                 BackgroundSyncState.Syncing,
                 $"正在寻找 {model} 最新起报并下载完整 15 天预报");
             var progress = new Progress<DataWorkerProgress>(item =>
+            {
                 Publish(
                     BackgroundSyncState.Syncing,
-                    item.IsWarning ? $"首次准备提醒：{item.Message}" : item.Message));
+                    item.IsWarning ? $"首次准备提醒：{item.Message}" : item.Message);
+                preparationProgress?.Report(item);
+            });
             var result = await dataWorker.SyncLatestAsync(
                 new SyncLatestRequest(
                     model,

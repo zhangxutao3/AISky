@@ -30,6 +30,7 @@ public sealed partial class MainPage : Page
     private bool _backgroundEventsAttached;
     private bool _isPlaying;
     private bool _firstRunBusy;
+    private int _firstRunCurrentItem;
     private int _currentForecastIndex;
     private int _lastTimelineSelectionIndex = -1;
     private int _displayUtcOffsetHours;
@@ -52,6 +53,10 @@ public sealed partial class MainPage : Page
         try
         {
             await App.Services.InitializeAsync();
+            if (!App.Services.CurrentSettings.FirstRunSetupCompleted)
+            {
+                ShowFirstRunOverlay();
+            }
             _displayUtcOffsetHours = Math.Clamp(
                 App.Services.CurrentSettings.DisplayUtcOffsetHours,
                 -12,
@@ -322,15 +327,6 @@ public sealed partial class MainPage : Page
         }
     }
 
-    private void FirstRunPasswordInput_PasswordChanged(object sender, RoutedEventArgs e)
-    {
-        if (!_firstRunBusy)
-        {
-            FirstRunProbeButton.IsEnabled =
-                !string.IsNullOrWhiteSpace(FirstRunPasswordInput.Password);
-        }
-    }
-
     private async Task ProbeFirstRunAsync()
     {
         if (_firstRunBusy)
@@ -339,21 +335,16 @@ public sealed partial class MainPage : Page
         }
 
         var password = FirstRunPasswordInput.Password.Trim();
-        if (string.IsNullOrWhiteSpace(password))
-        {
-            ShowFirstRunMessage("请输入数据访问密码，或导入一个已有的 NetCDF 文件。", InfoBarSeverity.Warning);
-            FirstRunPasswordInput.Focus(FocusState.Programmatic);
-            return;
-        }
-
         var model = GetFirstRunModel();
         SetFirstRunBusy(true, $"正在寻找 {model} 最新起报");
         FirstRunInfo.IsOpen = false;
         try
         {
+            var progress = new Progress<DataWorkerProgress>(UpdateFirstRunProgress);
             var result = await App.Services.BackgroundSync.PrepareFirstForecastAsync(
                 model,
-                password);
+                password,
+                progress);
             _index = result.Index;
             ApplyIndex(result.Index, result.Model, result.InitKey);
             if (result.IsComplete)
@@ -366,6 +357,11 @@ public sealed partial class MainPage : Page
                     });
                 FirstRunStatusText.Text =
                     $"{result.Model} 已准备 {result.AvailableRuns}/{result.ExpectedRuns} 个预报时次";
+                FirstRunProgressBar.Value = 100;
+                FirstRunProgressValueText.Text = "100%";
+                FirstRunProgressCountText.Text =
+                    $"{result.AvailableRuns} / {result.ExpectedRuns} 个时次";
+                FirstRunTransferText.Text = "本地校验完成，正在进入预报地图";
                 HideFirstRunOverlayIfReady(result.Index);
                 await App.Services.Log.WriteAsync(
                     "INFO",
@@ -376,11 +372,13 @@ public sealed partial class MainPage : Page
             var status = App.Services.BackgroundSync.CurrentStatus;
             FirstRunStatusText.Text =
                 $"当前起报仅有 {result.AvailableRuns}/{result.ExpectedRuns} 个预报时次";
+            FirstRunProgressCountText.Text =
+                $"{result.AvailableRuns} / {result.ExpectedRuns} 个时次可用";
             ShowFirstRunMessage(
                 status.IsError
                     ? status.Message
                     : result.InitKey is null
-                        ? $"最近 3 天暂未发现 {result.Model} 可用起报，请检查网络与密码后重试。"
+                        ? $"最近 3 天暂未发现 {result.Model} 可用起报，请检查网络后重试；若服务器要求验证，再填写访问密码。"
                         : "完整序列尚未下载完成，请保持网络连接后重试；已有文件不会重复下载。",
                 status.IsError ? InfoBarSeverity.Error : InfoBarSeverity.Warning);
         }
@@ -402,9 +400,12 @@ public sealed partial class MainPage : Page
         InfoBarSeverity severity = InfoBarSeverity.Informational)
     {
         FirstRunOverlay.Visibility = Visibility.Visible;
-        FirstRunStatusText.Text = "等待下载同一起报的 120 个预报时次";
-        FirstRunProbeButton.IsEnabled =
-            !string.IsNullOrWhiteSpace(FirstRunPasswordInput.Password);
+        FirstRunStatusText.Text = "等待开始初始化";
+        FirstRunProgressBar.Value = 0;
+        FirstRunProgressValueText.Text = "0%";
+        FirstRunProgressCountText.Text = "0 / 120 个时次";
+        FirstRunTransferText.Text = "选择模型后即可开始";
+        FirstRunProbeButton.IsEnabled = true;
         if (!string.IsNullOrWhiteSpace(message))
         {
             ShowFirstRunMessage(message, severity);
@@ -414,14 +415,7 @@ public sealed partial class MainPage : Page
             FirstRunInfo.IsOpen = false;
         }
 
-        if (string.IsNullOrWhiteSpace(FirstRunPasswordInput.Password))
-        {
-            FirstRunPasswordInput.Focus(FocusState.Programmatic);
-        }
-        else
-        {
-            FirstRunProbeButton.Focus(FocusState.Programmatic);
-        }
+        FirstRunProbeButton.Focus(FocusState.Programmatic);
     }
 
     private void ShowFirstRunMessage(string message, InfoBarSeverity severity)
@@ -444,12 +438,73 @@ public sealed partial class MainPage : Page
         FirstRunProgressRing.IsActive = isBusy;
         FirstRunModelPicker.IsEnabled = !isBusy;
         FirstRunPasswordInput.IsEnabled = !isBusy;
-        FirstRunProbeButton.IsEnabled =
-            !isBusy && !string.IsNullOrWhiteSpace(FirstRunPasswordInput.Password);
+        FirstRunProbeButton.IsEnabled = !isBusy;
         FirstRunImportButton.IsEnabled = !isBusy;
+        if (isBusy)
+        {
+            _firstRunCurrentItem = 0;
+            FirstRunProgressBar.Value = 0;
+            FirstRunProgressValueText.Text = "0%";
+            FirstRunProgressCountText.Text = "0 / 120 个时次";
+            FirstRunTransferText.Text = "正在连接 AISky 数据服务";
+        }
         if (!string.IsNullOrWhiteSpace(status))
         {
             FirstRunStatusText.Text = status;
+        }
+    }
+
+    private void UpdateFirstRunProgress(DataWorkerProgress progress)
+    {
+        if (progress.Stage == "transfer")
+        {
+            var received = progress.BytesReceived is { } bytes
+                ? $"{bytes / 1024d / 1024d:0.0} MB"
+                : progress.Message;
+            var total = progress.TotalBytes is { } totalBytes
+                ? $" / {totalBytes / 1024d / 1024d:0.0} MB"
+                : "";
+            FirstRunTransferText.Text = $"当前文件 {received}{total}";
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(progress.Message))
+        {
+            FirstRunStatusText.Text = progress.Message;
+        }
+
+        if (progress.Stage == "probe" && progress.Percent is { } probePercent)
+        {
+            var value = Math.Clamp(probePercent, 0, 35);
+            FirstRunProgressBar.Value = value;
+            FirstRunProgressValueText.Text = $"{value:0}%";
+            FirstRunProgressCountText.Text = "正在寻找最新起报";
+            FirstRunTransferText.Text = "自动跳过尚未发布的候选时刻";
+            return;
+        }
+
+        if (progress.Stage == "download")
+        {
+            FirstRunProgressBar.Value = 40;
+            FirstRunProgressValueText.Text = "40%";
+            FirstRunProgressCountText.Text = "已找到最新起报";
+            FirstRunTransferText.Text = "开始准备 15 天完整预报";
+            return;
+        }
+
+        if (progress.Stage is "file" or "file-complete")
+        {
+            _firstRunCurrentItem = progress.CurrentItem ?? _firstRunCurrentItem;
+            var totalItems = progress.TotalItems ?? 120;
+            var filePercent = Math.Clamp(progress.Percent ?? 0, 0, 100);
+            var overallPercent = 40 + filePercent * 0.6;
+            FirstRunProgressBar.Value = overallPercent;
+            FirstRunProgressValueText.Text = $"{overallPercent:0}%";
+            FirstRunProgressCountText.Text =
+                $"{_firstRunCurrentItem} / {totalItems} 个时次";
+            FirstRunTransferText.Text = progress.Stage == "file"
+                ? "正在下载并解析当前预报文件"
+                : "当前预报文件已完成本地校验";
         }
     }
 
@@ -682,14 +737,6 @@ public sealed partial class MainPage : Page
     {
         if (_selectedRun is null)
         {
-            return;
-        }
-        if (string.IsNullOrWhiteSpace(App.Services.CurrentSettings.DataAccessPassword))
-        {
-            ServiceStatusTitle.Text = "需要数据密码";
-            ServiceStatusText.Text = "请先在设置中填写数据访问密码（原始数据说明为 1234）";
-            SetStatusDot("AISkyWarningBrush");
-            await ShowSettingsDialogAsync();
             return;
         }
 

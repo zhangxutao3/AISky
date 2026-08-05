@@ -114,16 +114,16 @@
                 </ComboBox>
                 <PasswordBox
                     x:Name="DataAccessPasswordInput"
-                    AutomationProperties.Name="自动同步使用的数据访问密码"
-                    Header="数据访问密码"
+                    AutomationProperties.Name="自动同步使用的数据访问密码，可选"
+                    Header="数据访问密码（可选）"
                     MaxLength="128"
                     PasswordRevealMode="Peek"
-                    PlaceholderText="用于数据分享页下载，不会上传到 GitHub" />
+                    PlaceholderText="公开数据可留空；仅保存在本机" />
                 <InfoBar
                     x:Name="CredentialInfo"
                     IsClosable="False"
                     IsOpen="False"
-                    Message="开启自动同步前，请填写数据访问密码。"
+                    Message="公开数据无需密码；服务器要求验证时再填写。"
                     Severity="Warning" />
                 <ToggleSwitch
                     x:Name="KeepInTrayToggle"
@@ -241,7 +241,7 @@
                     VerticalAlignment="Center"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     Style="{StaticResource CaptionTextBlockStyle}"
-                    Text="版本 0.8.1" />
+                    Text="版本 0.8.2" />
             </Grid>
         </StackPanel>
     </ScrollViewer>

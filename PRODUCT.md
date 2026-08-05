@@ -26,7 +26,7 @@ The app is used for long desktop sessions with mouse and keyboard, often maximiz
 
 - Preserve AISky-Energy and AISky-SDS model selection, initialization selection, forecast-hour selection, product-layer selection, map navigation, color scale, timeline playback, grid-point drawer, local NetCDF import, remote synchronization, settings, updates, tray behavior, and single-instance activation.
 - Model comparison is intentionally excluded.
-- Remote data comes from password-protected CSTCloud share pages and is stored locally only after validation.
+- Remote data comes from public direct links or password-protected CSTCloud share pages and is stored locally only after validation.
 - The map must remain responsive at maximized desktop sizes and degrade gracefully at smaller window sizes.
 - Light, dark, high-contrast, keyboard, mouse, and reduced-motion behavior must remain viable.
 
