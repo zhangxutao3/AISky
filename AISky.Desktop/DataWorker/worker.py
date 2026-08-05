@@ -823,7 +823,7 @@ def run_download_range(args: argparse.Namespace) -> dict[str, Any]:
                         )
                         if isinstance(error, requests.RequestException):
                             raise RuntimeError(
-                                "网络连接失败，请检查网络后重试。"
+                                "数据服务器连接超时或网络不可用；本次尚未完成密码验证，请检查网络后重试。"
                             ) from error
                 consecutive_missing = 0 if found else consecutive_missing + 1
                 if locked_version and consecutive_missing >= 4:

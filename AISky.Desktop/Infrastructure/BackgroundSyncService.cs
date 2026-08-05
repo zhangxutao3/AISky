@@ -1,5 +1,6 @@
 using AISky_Desktop.Core;
 using AISky_Desktop.DataWorker;
+using System.Globalization;
 
 namespace AISky_Desktop.Infrastructure;
 
@@ -173,6 +174,82 @@ public sealed class BackgroundSyncService(
         }
     }
 
+    public async Task<ForecastIndex?> FillForecastSeriesAsync(
+        string model,
+        string initKey,
+        CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (!DateTimeOffset.TryParseExact(
+                initKey,
+                "yyyyMMdd_HHmm",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                out var initTime))
+        {
+            ScheduleAfterCompletion("序列补齐失败：起报时间格式无效", true);
+            return null;
+        }
+        if (!await _operationLock.WaitAsync(0, cancellationToken))
+        {
+            Publish(BackgroundSyncState.Syncing, "已有数据任务正在运行，请稍候");
+            return null;
+        }
+
+        using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            _shutdown.Token);
+        try
+        {
+            var hours = Math.Clamp(_settings.AutoSyncForecastHours, 24, 360);
+            Publish(
+                BackgroundSyncState.Syncing,
+                $"正在补齐 {model} 当前起报的 0–{hours} 小时序列");
+            var progress = new Progress<DataWorkerProgress>(item =>
+                Publish(
+                    BackgroundSyncState.Syncing,
+                    item.IsWarning ? $"补齐提醒：{item.Message}" : item.Message));
+            var result = await dataWorker.DownloadRangeAsync(
+                new DownloadRangeRequest(
+                    model,
+                    initTime,
+                    initTime,
+                    _settings.DataAccessPassword,
+                    hours),
+                progress,
+                linkedCancellation.Token);
+            IndexUpdated?.Invoke(this, result.Index);
+            var count = result.Index.Runs.Count(item =>
+                item.Model == model && item.InitKey == initKey);
+            var message = result.Downloaded > 0
+                ? $"序列已补齐：新增 {result.Downloaded} 个时次，当前共 {count} 个"
+                : count > 1
+                    ? $"当前起报已有 {count} 个时次，无需重复下载"
+                    : "未能从数据服务器取得更多时次，请检查网络后重试";
+            await log.WriteAsync(
+                result.Failed > 0 ? "WARN" : "INFO",
+                $"Forecast series fill finished. model={model}, init={initKey}, downloaded={result.Downloaded}, skipped={result.Skipped}, failed={result.Failed}.");
+            ScheduleAfterCompletion(message, result.Failed > 0 || count <= 1);
+            return result.Index;
+        }
+        catch (OperationCanceledException) when (_shutdown.IsCancellationRequested)
+        {
+            return null;
+        }
+        catch (Exception exception)
+        {
+            await log.WriteAsync("ERROR", $"Forecast series fill failed: {exception}");
+            ScheduleAfterCompletion(
+                $"序列补齐失败：{FriendlyError(exception)}",
+                isError: true);
+            return null;
+        }
+        finally
+        {
+            _operationLock.Release();
+        }
+    }
+
     public async Task<CleanupResult?> CleanupNowAsync(
         int retentionDays,
         IProgress<DataWorkerProgress>? progress = null,
@@ -259,7 +336,7 @@ public sealed class BackgroundSyncService(
         if (message.Contains("网络", StringComparison.OrdinalIgnoreCase)
             || message.Contains("timed out", StringComparison.OrdinalIgnoreCase))
         {
-            return "网络不可用，请检查连接；后台稍后会自动重试";
+            return "数据服务器连接超时（尚未进入密码验证），请检查网络；后台稍后会自动重试";
         }
         return string.IsNullOrWhiteSpace(message) ? "未知错误，详情已写入日志" : message;
     }

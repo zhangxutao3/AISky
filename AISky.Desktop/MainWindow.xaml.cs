@@ -203,5 +203,6 @@ public sealed partial class MainWindow : Window
         _trayIcon?.Dispose();
         _trayIcon = null;
         App.Services.BackgroundSync.Dispose();
+        ((App)Application.Current).ShutdownSingleInstance();
     }
 }

@@ -7,6 +7,7 @@
     xmlns:local="using:AISky_Desktop"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     Loaded="MainPage_Loaded"
+    SizeChanged="RootLayout_SizeChanged"
     mc:Ignorable="d">
 
     <Grid x:Name="RootLayout" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
@@ -469,6 +470,7 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <Button
                     x:Name="PlayButton"
@@ -537,6 +539,23 @@
                         Value="0"
                         ValueChanged="TimelineSlider_ValueChanged" />
                 </Grid>
+                <Button
+                    x:Name="FillSeriesButton"
+                    Grid.Column="3"
+                    Width="42"
+                    Height="42"
+                    Padding="0"
+                    VerticalAlignment="Center"
+                    AutomationProperties.Name="补齐当前起报预报序列"
+                    Background="#18FFFFFF"
+                    BorderBrush="#30FFFFFF"
+                    Click="FillSeriesButton_Click"
+                    Content="&#xE895;"
+                    CornerRadius="12"
+                    FontFamily="Segoe Fluent Icons"
+                    Foreground="White"
+                    ToolTipService.ToolTip="从数据服务器补齐当前起报的预报序列"
+                    Visibility="Collapsed" />
             </Grid>
         </Border>
 

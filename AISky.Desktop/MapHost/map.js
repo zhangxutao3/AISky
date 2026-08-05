@@ -19,8 +19,10 @@ const pointFirstTime = document.querySelector("#pointFirstTime");
 const pointLastTime = document.querySelector("#pointLastTime");
 const pointStatus = document.querySelector("#pointStatus");
 
-const defaultView = { left: 45, right: 165, top: 72, bottom: 5 };
-const view = { ...defaultView };
+const initialView = { left: 45, right: 165, top: 72, bottom: 5 };
+const worldView = { left: -180, right: 180, top: 85, bottom: -85 };
+const view = { ...initialView };
+const textureBounds = { ...worldView };
 const fieldCache = new Map();
 const sampleCache = new Map();
 let coastlines = [];
@@ -40,6 +42,23 @@ let mapTheme = "light";
 let fieldOpacity = 0.93;
 let showGrid = true;
 let showPlaces = true;
+
+function clamp(value, minimum, maximum) {
+  return Math.max(minimum, Math.min(maximum, value));
+}
+
+function setConstrainedView(candidate) {
+  const width = clamp(candidate.right - candidate.left, 12, 360);
+  const height = clamp(candidate.top - candidate.bottom, 8, 170);
+  const left = clamp(candidate.left, worldView.left, worldView.right - width);
+  const top = clamp(candidate.top, worldView.bottom + height, worldView.top);
+  Object.assign(view, {
+    left,
+    right: left + width,
+    top,
+    bottom: top - height,
+  });
+}
 
 function project(lon, lat, width, height) {
   return [
@@ -331,12 +350,11 @@ async function showPointDetails(lon, lat) {
   requestAnimationFrame(() => drawPointChart(series));
 }
 
-function drawRealField(width, height, field) {
-  drawEmptyField(width, height);
-  const scale = Math.max(2, Math.round(window.devicePixelRatio * 2));
+function prepareFieldTexture(field) {
+  if (field.texture) return field.texture;
   const raster = document.createElement("canvas");
-  raster.width = Math.max(360, Math.round(width / scale));
-  raster.height = Math.max(220, Math.round(height / scale));
+  raster.width = 1280;
+  raster.height = 640;
   const rasterContext = raster.getContext("2d", { alpha: true });
   const image = rasterContext.createImageData(raster.width, raster.height);
   const palette = field.layer.palette;
@@ -346,9 +364,11 @@ function drawRealField(width, height, field) {
   const renderPalette = sparseLayer && palette.length > 2 ? palette.slice(1) : palette;
 
   for (let y = 0; y < raster.height; y += 1) {
-    const lat = view.top - (y / Math.max(1, raster.height - 1)) * (view.top - view.bottom);
+    const lat = textureBounds.top
+      - (y / Math.max(1, raster.height - 1)) * (textureBounds.top - textureBounds.bottom);
     for (let x = 0; x < raster.width; x += 1) {
-      const lon = view.left + (x / Math.max(1, raster.width - 1)) * (view.right - view.left);
+      const lon = textureBounds.left
+        + (x / Math.max(1, raster.width - 1)) * (textureBounds.right - textureBounds.left);
       const value = sampleField(field, lon, lat);
       const offset = (y * raster.width + x) * 4;
       if (value === null) {
@@ -373,11 +393,36 @@ function drawRealField(width, height, field) {
   }
 
   rasterContext.putImageData(image, 0, 0);
+  field.texture = raster;
+  return raster;
+}
+
+function drawRealField(width, height, field) {
+  drawEmptyField(width, height);
+  const raster = prepareFieldTexture(field);
+  const sourceX = ((view.left - textureBounds.left)
+    / (textureBounds.right - textureBounds.left)) * raster.width;
+  const sourceY = ((textureBounds.top - view.top)
+    / (textureBounds.top - textureBounds.bottom)) * raster.height;
+  const sourceWidth = ((view.right - view.left)
+    / (textureBounds.right - textureBounds.left)) * raster.width;
+  const sourceHeight = ((view.top - view.bottom)
+    / (textureBounds.top - textureBounds.bottom)) * raster.height;
   context.save();
   context.globalAlpha = fieldOpacity;
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = "high";
-  context.drawImage(raster, 0, 0, width, height);
+  context.drawImage(
+    raster,
+    sourceX,
+    sourceY,
+    sourceWidth,
+    sourceHeight,
+    0,
+    0,
+    width,
+    height,
+  );
   context.restore();
 }
 
@@ -610,10 +655,12 @@ canvas.addEventListener("pointermove", (event) => {
     const latPerPixel = (dragState.view.top - dragState.view.bottom) / canvas.clientHeight;
     const deltaLon = (event.clientX - dragState.x) * lonPerPixel;
     const deltaLat = (event.clientY - dragState.y) * latPerPixel;
-    view.left = dragState.view.left - deltaLon;
-    view.right = dragState.view.right - deltaLon;
-    view.top = Math.min(90, dragState.view.top + deltaLat);
-    view.bottom = Math.max(-90, dragState.view.bottom + deltaLat);
+    setConstrainedView({
+      left: dragState.view.left - deltaLon,
+      right: dragState.view.right - deltaLon,
+      top: dragState.view.top + deltaLat,
+      bottom: dragState.view.bottom + deltaLat,
+    });
     requestRender();
   }
 
@@ -654,14 +701,18 @@ canvas.addEventListener("wheel", (event) => {
   event.preventDefault();
   const [focusLon, focusLat] = unproject(event.offsetX, event.offsetY);
   const factor = event.deltaY < 0 ? 0.82 : 1.22;
-  const nextWidth = Math.min(300, Math.max(12, (view.right - view.left) * factor));
-  const nextHeight = Math.min(150, Math.max(8, (view.top - view.bottom) * factor));
+  const nextWidth = clamp((view.right - view.left) * factor, 12, 360);
+  const nextHeight = clamp((view.top - view.bottom) * factor, 8, 170);
   const xRatio = event.offsetX / canvas.clientWidth;
   const yRatio = event.offsetY / canvas.clientHeight;
-  view.left = focusLon - nextWidth * xRatio;
-  view.right = view.left + nextWidth;
-  view.top = Math.min(90, focusLat + nextHeight * yRatio);
-  view.bottom = Math.max(-90, view.top - nextHeight);
+  const left = focusLon - nextWidth * xRatio;
+  const top = focusLat + nextHeight * yRatio;
+  setConstrainedView({
+    left,
+    right: left + nextWidth,
+    top,
+    bottom: top - nextHeight,
+  });
   requestRender();
 }, { passive: false });
 
@@ -689,7 +740,7 @@ window.chrome?.webview?.addEventListener("message", (event) => {
     activeLead = Number(message.lead) || 0;
     leadLabel.textContent = activeLead >= 0 ? `+${activeLead}h` : `${activeLead}h`;
   } else if (message.type === "reset-view") {
-    Object.assign(view, defaultView);
+    Object.assign(view, worldView);
     void render();
   } else if (message.type === "set-theme") {
     mapTheme = message.theme === "dark" ? "dark" : "light";

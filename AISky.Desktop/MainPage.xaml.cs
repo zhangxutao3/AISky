@@ -432,6 +432,11 @@ public sealed partial class MainPage : Page
 
     private async void SettingsButton_Click(object sender, RoutedEventArgs e)
     {
+        await ShowSettingsDialogAsync();
+    }
+
+    private async Task ShowSettingsDialogAsync()
+    {
         var dialog = new SettingsDialog(App.Services.CurrentSettings)
         {
             XamlRoot = XamlRoot,
@@ -460,6 +465,31 @@ public sealed partial class MainPage : Page
             SetStatusDot("AISkyErrorBrush");
             await App.Services.Log.WriteAsync("ERROR", $"Settings update failed: {exception}");
         }
+    }
+
+    private void RootLayout_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (LayerPanel is null || LayerList is null || ColorBarPanel is null)
+        {
+            return;
+        }
+
+        var width = e.NewSize.Width;
+        var height = e.NewSize.Height;
+        var compact = width < 980;
+        var wide = width >= 1420;
+        var topInset = compact ? 78d : wide ? 88d : 86d;
+        var timelineInset = compact ? 104d : wide ? 116d : 110d;
+        var colorBarVisible = height >= 650 && width >= 700;
+        ColorBarPanel.Visibility = colorBarVisible
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+        var panelCap = compact ? 430d : wide ? 560d : 480d;
+        var colorBarReserve = colorBarVisible ? 92d : 12d;
+        var availableHeight = height - topInset - timelineInset - colorBarReserve;
+        LayerPanel.MaxHeight = Math.Min(panelCap, Math.Max(230, availableHeight));
+        LayerList.MaxHeight = Math.Max(130, LayerPanel.MaxHeight - 108);
     }
 
     private async void AutoSyncButton_Changed(object sender, RoutedEventArgs e)
@@ -522,6 +552,26 @@ public sealed partial class MainPage : Page
 
     private void GlobeButton_Click(object sender, RoutedEventArgs e) =>
         PostMapMessage(new { type = "reset-view" });
+
+    private async void FillSeriesButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedRun is null)
+        {
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(App.Services.CurrentSettings.DataAccessPassword))
+        {
+            ServiceStatusTitle.Text = "需要数据密码";
+            ServiceStatusText.Text = "请先在设置中填写数据访问密码（原始数据说明为 1234）";
+            SetStatusDot("AISkyWarningBrush");
+            await ShowSettingsDialogAsync();
+            return;
+        }
+
+        await App.Services.BackgroundSync.FillForecastSeriesAsync(
+            _selectedRun.Model,
+            _selectedRun.InitKey);
+    }
 
     private void ThemeToggle_Changed(object sender, RoutedEventArgs e)
     {
@@ -797,6 +847,7 @@ public sealed partial class MainPage : Page
             FirstForecastText.Text = "--";
             LastForecastText.Text = "--";
             TimelineSlider.Maximum = 0;
+            FillSeriesButton.Visibility = Visibility.Collapsed;
             CompactRunButton.Content = $"{GetSelectedModel()} · 暂无数据";
             UpdateEmptyColorBar();
             SendSelectedRunToMap();
@@ -841,8 +892,11 @@ public sealed partial class MainPage : Page
         }
         LeadText.Text = FormatLead(run.LeadHours);
         TimelineSummaryText.Text = _currentForecastRuns.Count == 1
-            ? "1 个预报时刻"
+            ? "仅 1 个时次 · 可补齐序列"
             : $"{_currentForecastRuns.Count} 个预报时刻 · 3 小时间隔";
+        FillSeriesButton.Visibility = _currentForecastRuns.Count == 1
+            ? Visibility.Visible
+            : Visibility.Collapsed;
         ForecastTimeText.Text =
             $"{FormatUtcKey(run.ForecastKey, "MM-dd HH:mm")} · {FormatLead(run.LeadHours)} UTC";
         FirstForecastText.Text = _currentForecastRuns.Count == 0
