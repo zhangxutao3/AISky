@@ -23,7 +23,7 @@
 
 ```text
 AISky-Desktop-win-x64.zip
-SHA-256: a712eb931487c53152aefc9470b87d1602942ccd97c9f6619444c5cc8d86c21a
+SHA-256: 9bc2ec12c815e030de874e6285de3a683f456cce6f26dd2c7be2727613182ab6
 ```
 
 数据管线一键测试：
