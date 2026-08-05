@@ -108,7 +108,7 @@ public sealed class BackgroundSyncService(
                             model,
                             _settings.DataAccessPassword,
                             Math.Clamp(_settings.LatestProbeDays, 1, 14),
-                            Math.Clamp(_settings.AutoSyncForecastHours, 0, 168)),
+                            Math.Clamp(_settings.AutoSyncForecastHours, 0, 360)),
                         progress,
                         linkedCancellation.Token);
                     index = result.Index;
