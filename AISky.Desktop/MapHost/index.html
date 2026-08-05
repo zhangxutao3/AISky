@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AISky Local Map Host</title>
+  <link rel="stylesheet" href="map.css">
+</head>
+<body>
+  <canvas id="map" aria-label="AISky 本地气象地图"></canvas>
+  <div class="map-context">
+    <div class="model-badge">
+      <span class="dot"></span>
+      <strong id="layerName">T2M</strong>
+      <span id="leadName">+3h</span>
+    </div>
+    <div class="data-status" id="dataStatus">正在准备本地数据</div>
+  </div>
+  <div class="coordinates" id="coordinates">经度 --　纬度 --</div>
+  <script src="map.js"></script>
+</body>
+</html>

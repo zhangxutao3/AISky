@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ContentDialog
+    x:Class="AISky_Desktop.UpdateDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Title="软件更新"
+    CloseButtonText="关闭"
+    Closing="UpdateDialog_Closing"
+    Loaded="UpdateDialog_Loaded"
+    mc:Ignorable="d">
+
+    <StackPanel Width="500" Spacing="16">
+        <Grid ColumnSpacing="14">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Border
+                Width="46"
+                Height="46"
+                Background="{ThemeResource AccentFillColorSecondaryBrush}"
+                CornerRadius="12">
+                <FontIcon
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    FontSize="22"
+                    Glyph="&#xE895;" />
+            </Border>
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                <TextBlock
+                    Style="{StaticResource SubtitleTextBlockStyle}"
+                    Text="AISky 智慧气象桌面平台" />
+                <TextBlock
+                    x:Name="CurrentVersionText"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    Text="当前版本" />
+            </StackPanel>
+        </Grid>
+
+        <InfoBar
+            x:Name="UpdateInfo"
+            IsClosable="False"
+            IsOpen="True"
+            Message="正在连接 GitHub Release…"
+            Severity="Informational" />
+
+        <ProgressBar
+            x:Name="UpdateProgress"
+            IsIndeterminate="True"
+            Visibility="Visible" />
+
+        <Border
+            x:Name="ReleasePanel"
+            Padding="16"
+            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="12"
+            Visibility="Collapsed">
+            <StackPanel Spacing="10">
+                <TextBlock
+                    x:Name="ReleaseTitleText"
+                    Style="{StaticResource BodyStrongTextBlockStyle}"
+                    Text="新版本" />
+                <TextBlock
+                    x:Name="ReleaseMetadataText"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    Text="发布时间 · 下载大小" />
+                <Rectangle
+                    Height="1"
+                    Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                <TextBlock
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    Text="更新说明" />
+                <ScrollViewer
+                    MaxHeight="190"
+                    VerticalScrollBarVisibility="Auto">
+                    <TextBlock
+                        x:Name="ReleaseNotesText"
+                        IsTextSelectionEnabled="True"
+                        Text="暂无更新说明"
+                        TextWrapping="Wrap" />
+                </ScrollViewer>
+            </StackPanel>
+        </Border>
+
+        <Grid ColumnSpacing="10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Button
+                x:Name="RetryButton"
+                AutomationProperties.Name="重新检查更新"
+                Click="RetryButton_Click"
+                Content="重新检查"
+                Visibility="Collapsed" />
+            <Button
+                x:Name="OpenReleaseButton"
+                Grid.Column="1"
+                AutomationProperties.Name="查看 GitHub 发布页面"
+                Click="OpenReleaseButton_Click"
+                Content="查看发布页"
+                Visibility="Collapsed" />
+            <Button
+                x:Name="UpdateActionButton"
+                Grid.Column="2"
+                MinWidth="126"
+                AutomationProperties.Name="下载软件更新"
+                Click="UpdateActionButton_Click"
+                Content="下载更新"
+                Style="{StaticResource AccentButtonStyle}"
+                Visibility="Collapsed" />
+        </Grid>
+    </StackPanel>
+</ContentDialog>

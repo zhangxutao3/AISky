@@ -1,0 +1,16 @@
+namespace AISky_Desktop.Core;
+
+public sealed record AppSettings
+{
+    public string Theme { get; init; } = "System";
+    public bool AutoSyncEnabled { get; init; }
+    public int AutoSyncIntervalHours { get; init; } = 3;
+    public int AutoSyncForecastHours { get; init; } = 24;
+    public int LatestProbeDays { get; init; } = 3;
+    public string DataAccessPassword { get; init; } = "";
+    public int CacheRetentionDays { get; init; } = 3;
+    public int MaxConcurrentDownloads { get; init; } = 2;
+    public bool StartWithWindows { get; init; }
+    public bool KeepRunningInTray { get; init; } = true;
+    public bool CheckUpdatesOnStartup { get; init; } = true;
+}

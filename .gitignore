@@ -1,0 +1,29 @@
+# Build and publish outputs
+**/bin/
+**/obj/
+artifacts/
+
+# Local IDE state
+.vs/
+.vscode/
+*.user
+*.suo
+
+# Local caches, logs and temporary downloads
+**/__pycache__/
+*.pyc
+*.log
+*.pid
+*.part
+*.tmp
+
+# Local data and credentials
+.env
+*.env
+*.env.*
+*.nc
+
+# The website prototype contains local datasets, a virtual environment,
+# server logs and deployment credentials. It is intentionally excluded
+# from the desktop application's source repository.
+aisky_web_example/

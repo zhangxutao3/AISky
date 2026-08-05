@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Default">
+            <SolidColorBrush x:Key="AISkyChromeBrush" Color="#F2F8FA" />
+            <SolidColorBrush x:Key="AISkyChromeStrongBrush" Color="#F8FCFD" />
+            <SolidColorBrush x:Key="AISkyChromeBorderBrush" Color="#6676929C" />
+            <SolidColorBrush x:Key="AISkyLayerHoverBrush" Color="#16076B82" />
+            <SolidColorBrush x:Key="AISkyLayerSelectedBrush" Color="#2400718A" />
+            <SolidColorBrush x:Key="AISkyTextMutedBrush" Color="#B3264552" />
+            <SolidColorBrush x:Key="AISkyCountBrush" Color="#1500718A" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Dark">
+            <SolidColorBrush x:Key="AISkyChromeBrush" Color="#E31A2B34" />
+            <SolidColorBrush x:Key="AISkyChromeStrongBrush" Color="#F020333D" />
+            <SolidColorBrush x:Key="AISkyChromeBorderBrush" Color="#6B73919C" />
+            <SolidColorBrush x:Key="AISkyLayerHoverBrush" Color="#287AB5C7" />
+            <SolidColorBrush x:Key="AISkyLayerSelectedBrush" Color="#3A30A9C4" />
+            <SolidColorBrush x:Key="AISkyTextMutedBrush" Color="#C8D8E8EE" />
+            <SolidColorBrush x:Key="AISkyCountBrush" Color="#2748BCD1" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="HighContrast">
+            <SolidColorBrush x:Key="AISkyChromeBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="AISkyChromeStrongBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="AISkyChromeBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="AISkyLayerHoverBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="AISkyLayerSelectedBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="AISkyTextMutedBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="AISkyCountBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+        </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+
+    <SolidColorBrush x:Key="AISkyAccentBrush" Color="#087F9C" />
+    <SolidColorBrush x:Key="AISkyAccentBrightBrush" Color="#1AB4C8" />
+    <SolidColorBrush x:Key="AISkySunBrush" Color="#E5AB36" />
+    <SolidColorBrush x:Key="AISkySuccessBrush" Color="#20AF91" />
+    <SolidColorBrush x:Key="AISkyWarningBrush" Color="#E5AB36" />
+    <SolidColorBrush x:Key="AISkyErrorBrush" Color="#D94D5C" />
+    <SolidColorBrush x:Key="AISkyDarkChromeBrush" Color="#ED102A35" />
+    <SolidColorBrush x:Key="AISkyDarkChromeBorderBrush" Color="#747696A1" />
+    <SolidColorBrush x:Key="AISkyDarkMutedTextBrush" Color="#C8D7E7EC" />
+
+    <Style x:Key="AISkyFloatingPanelStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource AISkyChromeBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource AISkyChromeBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="16" />
+    </Style>
+
+    <Style x:Key="AISkyElevatedPanelStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource AISkyChromeStrongBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource AISkyChromeBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="18" />
+    </Style>
+
+    <Style x:Key="AISkyDarkFloatingPanelStyle" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource AISkyDarkChromeBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource AISkyDarkChromeBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="16" />
+    </Style>
+
+    <Style x:Key="AISkyLayerItemStyle" TargetType="ListViewItem">
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="MinHeight" Value="54" />
+        <Setter Property="Margin" Value="0,2" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="CornerRadius" Value="10" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+    </Style>
+
+    <Style x:Key="AISkyCompactComboBoxStyle" TargetType="ComboBox">
+        <Setter Property="MinHeight" Value="38" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+
+    <Style x:Key="AISkyPlayButtonStyle" TargetType="Button">
+        <Setter Property="Width" Value="56" />
+        <Setter Property="Height" Value="56" />
+        <Setter Property="Background" Value="{StaticResource AISkyAccentBrightBrush}" />
+        <Setter Property="Foreground" Value="#FF082B35" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="28" />
+        <Setter Property="FontFamily" Value="Segoe Fluent Icons" />
+        <Setter Property="FontSize" Value="18" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+    </Style>
+</ResourceDictionary>

@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "AISky.Desktop (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "AISky.Desktop (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
