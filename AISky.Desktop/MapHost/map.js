@@ -40,6 +40,7 @@ let renderQueued = false;
 let dragState = null;
 let suppressMapClick = false;
 let pointSelection = null;
+let pointSeriesData = [];
 let mapTheme = "light";
 let fieldOpacity = 0.93;
 let showGrid = true;
@@ -362,9 +363,26 @@ function drawPointChart(series) {
   }
 }
 
+function updatePointCurrentReading() {
+  if (!pointSelection || pointPanel.hidden) return;
+  const layer = activeRun?.layers?.find((item) => item.id === activeLayerId)
+    ?? activeRun?.layers?.[0];
+  const current = activeField
+    ? sampleField(activeField, pointSelection.lon, pointSelection.lat)
+    : null;
+  pointLayerName.textContent = layer ? `${layer.label} · ${layer.cn}` : "格点预报";
+  pointValue.textContent = formatValue(current);
+  pointUnit.textContent = layer?.unit || "";
+  pointValidTime.textContent = activeRun
+    ? `${formatForecastKey(activeRun.forecastKey)} UTC · ${activeRun.model} · ${activeLead >= 0 ? "+" : ""}${activeLead}h`
+    : "暂无本地预报数据";
+  drawPointChart(pointSeriesData);
+}
+
 async function showPointDetails(lon, lat) {
   const generation = ++pointGeneration;
   pointSelection = { lon, lat };
+  pointSeriesData = [];
   pointPanel.hidden = false;
   const layer = activeRun?.layers?.find((item) => item.id === activeLayerId)
     ?? activeRun?.layers?.[0];
@@ -422,20 +440,32 @@ async function showPointDetails(lon, lat) {
   pointStatus.textContent = validCount > 0
     ? "曲线来自当前起报的本地抽样缓存；主数值来自完整栅格"
     : "该格点没有有效值，可尝试选择其他位置或图层";
+  pointSeriesData = series;
   requestAnimationFrame(() => drawPointChart(series));
 }
 
 function prepareFieldTexture(field) {
   if (field.texture) return field.texture;
   const raster = document.createElement("canvas");
-  raster.width = 1280;
-  raster.height = 640;
+  raster.width = 1024;
+  raster.height = 512;
   const rasterContext = raster.getContext("2d", { alpha: true });
   const image = rasterContext.createImageData(raster.width, raster.height);
   const palette = field.layer.palette;
   const [low, high] = field.info.range;
   const span = Math.max(1e-6, high - low);
-  const sparseLayer = ["prectot", "duexttau"].includes(field.layer.id);
+  const sparseLayer = [
+    "prectot",
+    "duexttau",
+    "duextt25",
+    "duscatau",
+    "duscat25",
+    "ducmass",
+    "ducmass25",
+    "dusmass",
+    "dusmass25",
+    "duflux",
+  ].includes(field.layer.id);
   const renderPalette = sparseLayer && palette.length > 2 ? palette.slice(1) : palette;
 
   for (let y = 0; y < raster.height; y += 1) {
@@ -523,8 +553,12 @@ function drawGrid(width, height) {
     : "rgba(15, 61, 74, 0.76)";
   context.font = `${12 * window.devicePixelRatio}px "Segoe UI Variable"`;
 
-  const lonStep = view.right - view.left < 45 ? 5 : 10;
-  const latStep = view.top - view.bottom < 30 ? 5 : 10;
+  const lonSpan = view.right - view.left;
+  const latSpan = view.top - view.bottom;
+  const lonStep = lonSpan <= 30 ? 5 : lonSpan <= 80 ? 10 : lonSpan <= 180 ? 20 : 30;
+  const latStep = latSpan <= 24 ? 5 : latSpan <= 70 ? 10 : 20;
+  const edgeInset = 7 * window.devicePixelRatio;
+  context.textBaseline = "top";
   for (let lon = Math.ceil(view.left / lonStep) * lonStep; lon <= view.right; lon += lonStep) {
     const [x] = project(lon, view.bottom, width, height);
     context.beginPath();
@@ -532,17 +566,25 @@ function drawGrid(width, height) {
     context.lineTo(x, height);
     context.stroke();
     const displayLon = wrapLongitude(lon);
-    const suffix = displayLon < 0 ? "W" : "E";
-    context.fillText(`${Math.abs(displayLon)}°${suffix}`, x + 6, 92 * window.devicePixelRatio);
+    const suffix = displayLon === 0 ? "" : displayLon < 0 ? "W" : "E";
+    const label = `${Math.abs(displayLon)}°${suffix}`;
+    const labelWidth = context.measureText(label).width;
+    context.fillText(
+      label,
+      clamp(x - labelWidth / 2, edgeInset, width - labelWidth - edgeInset),
+      edgeInset,
+    );
   }
+  context.textBaseline = "middle";
   for (let lat = Math.ceil(view.bottom / latStep) * latStep; lat <= view.top; lat += latStep) {
     const [, y] = project(view.left, lat, width, height);
     context.beginPath();
     context.moveTo(0, y);
     context.lineTo(width, y);
     context.stroke();
-    const suffix = lat < 0 ? "S" : "N";
-    context.fillText(`${Math.abs(lat)}°${suffix}`, 10 * window.devicePixelRatio, y - 7);
+    const suffix = lat === 0 ? "" : lat < 0 ? "S" : "N";
+    const label = `${Math.abs(lat)}°${suffix}`;
+    context.fillText(label, edgeInset, clamp(y, edgeInset, height - edgeInset));
   }
   context.restore();
 }
@@ -731,7 +773,7 @@ function animateWind(timestamp) {
   resizeWindCanvas();
   const width = windCanvas.width;
   const height = windCanvas.height;
-  const targetCount = Math.min(1150, Math.max(340, Math.round((width * height) / 3500)));
+  const targetCount = Math.min(1550, Math.max(480, Math.round((width * height) / 2700)));
   while (windParticles.length < targetCount) {
     const particle = {};
     resetWindParticle(particle);
@@ -744,7 +786,7 @@ function animateWind(timestamp) {
   windContext.fillRect(0, 0, width, height);
   windContext.globalCompositeOperation = "source-over";
   windContext.lineCap = "round";
-  windContext.lineWidth = Math.max(0.8, window.devicePixelRatio || 1);
+  windContext.lineWidth = Math.max(1.25, (window.devicePixelRatio || 1) * 1.12);
 
   const lonSpan = view.right - view.left;
   const latSpan = view.top - view.bottom;
@@ -773,7 +815,7 @@ function animateWind(timestamp) {
     const y1 = ((view.top - particle.lat) / latSpan) * height;
     const x2 = ((nextLon - view.left) / lonSpan) * width;
     const y2 = ((view.top - nextLat) / latSpan) * height;
-    const alpha = 0.28 + Math.min(0.55, speed / 36);
+    const alpha = 0.34 + Math.min(0.54, speed / 38);
     windContext.strokeStyle = `rgba(243, 255, 255, ${alpha})`;
     windContext.beginPath();
     windContext.moveTo(x1, y1);
@@ -931,6 +973,7 @@ pointClose.addEventListener("click", () => {
   pointGeneration += 1;
   pointPanel.hidden = true;
   pointSelection = null;
+  pointSeriesData = [];
   requestRender();
   canvas.focus();
 });
@@ -973,6 +1016,12 @@ window.chrome?.webview?.addEventListener("message", (event) => {
         void showPointDetails(pointSelection.lon, pointSelection.lat);
       }
     });
+  } else if (message.type === "set-frame") {
+    activeRun = message.run || null;
+    activeLayerId = message.layer || activeLayerId || activeRun?.layers?.[0]?.id || "";
+    activeLead = Number(activeRun?.leadHours ?? 0);
+    leadLabel.textContent = activeLead >= 0 ? `+${activeLead}h` : `${activeLead}h`;
+    void render().then(() => updatePointCurrentReading());
   } else if (message.type === "set-layer") {
     activeLayerId = String(message.layer || "").toLowerCase();
     void render().then(() => {
@@ -1003,8 +1052,7 @@ window.addEventListener("resize", () => {
   stopWindAnimation();
   requestRender();
   if (!pointPanel.hidden) {
-    requestAnimationFrame(() => drawPointChart([]));
-    void showPointDetails(pointSelection.lon, pointSelection.lat);
+    requestAnimationFrame(() => drawPointChart(pointSeriesData));
   }
 });
 loadAssets()

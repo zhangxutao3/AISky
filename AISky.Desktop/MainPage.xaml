@@ -10,6 +10,25 @@
     SizeChanged="RootLayout_SizeChanged"
     mc:Ignorable="d">
 
+    <Page.Resources>
+        <Style x:Key="TimelineSlotButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="30" />
+            <Setter Property="Height" Value="20" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="{ThemeResource AISkyCountBrush}" />
+            <Setter Property="BorderBrush" Value="{ThemeResource AISkyChromeBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="5" />
+        </Style>
+        <Style x:Key="TimelineSlotButtonSelectedStyle" TargetType="Button" BasedOn="{StaticResource TimelineSlotButtonStyle}">
+            <Setter Property="Background" Value="{StaticResource AISkyAccentBrightBrush}" />
+            <Setter Property="BorderBrush" Value="#D9FFFFFF" />
+            <Setter Property="BorderThickness" Value="2" />
+        </Style>
+    </Page.Resources>
+
     <!-- Visual direction: airy cloud-white controls, slate typography, and restrained mint/sky iridescence over a map-first canvas. -->
     <Grid x:Name="RootLayout" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
         <VisualStateManager.VisualStateGroups>
@@ -23,13 +42,10 @@
                         <Setter Target="CompactRunButton.Visibility" Value="Visible" />
                         <Setter Target="BrandLockup.Visibility" Value="Collapsed" />
                         <Setter Target="UpdateStatus.Visibility" Value="Collapsed" />
-                        <Setter Target="LayerPanel.Width" Value="148" />
-                        <Setter Target="LayerPanel.MaxHeight" Value="430" />
-                        <Setter Target="LayerPanel.Margin" Value="0,78,8,0" />
+                        <Setter Target="RightRail.Width" Value="168" />
+                        <Setter Target="RightRail.Margin" Value="0,78,8,104" />
                         <Setter Target="LayerPanel.Padding" Value="8" />
                         <Setter Target="LayerHint.Visibility" Value="Collapsed" />
-                        <Setter Target="ColorBarPanel.Width" Value="232" />
-                        <Setter Target="ColorBarPanel.Margin" Value="0,0,8,104" />
                         <Setter Target="TopChrome.Margin" Value="8,8,8,0" />
                         <Setter Target="TimelinePanel.Margin" Value="76,0,8,8" />
                         <Setter Target="TimelineCaption.Visibility" Value="Collapsed" />
@@ -46,13 +62,10 @@
                         <Setter Target="CompactRunButton.Visibility" Value="Collapsed" />
                         <Setter Target="BrandLockup.Visibility" Value="Collapsed" />
                         <Setter Target="UpdateStatus.Visibility" Value="Collapsed" />
-                        <Setter Target="LayerPanel.Width" Value="208" />
-                        <Setter Target="LayerPanel.MaxHeight" Value="480" />
-                        <Setter Target="LayerPanel.Margin" Value="0,86,12,0" />
+                        <Setter Target="RightRail.Width" Value="228" />
+                        <Setter Target="RightRail.Margin" Value="0,86,12,110" />
                         <Setter Target="LayerPanel.Padding" Value="10" />
                         <Setter Target="LayerHint.Visibility" Value="Visible" />
-                        <Setter Target="ColorBarPanel.Width" Value="286" />
-                        <Setter Target="ColorBarPanel.Margin" Value="0,0,12,110" />
                         <Setter Target="TopChrome.Margin" Value="12,12,12,0" />
                         <Setter Target="TimelinePanel.Margin" Value="96,0,12,12" />
                         <Setter Target="TimelineCaption.Visibility" Value="Visible" />
@@ -69,13 +82,10 @@
                         <Setter Target="CompactRunButton.Visibility" Value="Collapsed" />
                         <Setter Target="BrandLockup.Visibility" Value="Visible" />
                         <Setter Target="UpdateStatus.Visibility" Value="Visible" />
-                        <Setter Target="LayerPanel.Width" Value="224" />
-                        <Setter Target="LayerPanel.MaxHeight" Value="560" />
-                        <Setter Target="LayerPanel.Margin" Value="0,88,18,0" />
+                        <Setter Target="RightRail.Width" Value="252" />
+                        <Setter Target="RightRail.Margin" Value="0,88,18,116" />
                         <Setter Target="LayerPanel.Padding" Value="12" />
                         <Setter Target="LayerHint.Visibility" Value="Visible" />
-                        <Setter Target="ColorBarPanel.Width" Value="324" />
-                        <Setter Target="ColorBarPanel.Margin" Value="0,0,18,116" />
                         <Setter Target="TopChrome.Margin" Value="18,14,18,0" />
                         <Setter Target="TimelinePanel.Margin" Value="116,0,18,16" />
                         <Setter Target="TimelineCaption.Visibility" Value="Visible" />
@@ -145,18 +155,11 @@
                         VerticalAlignment="Center"
                         Orientation="Horizontal"
                         Spacing="8">
-                        <Border
-                            Width="34"
-                            Height="34"
-                            Background="{StaticResource AISkyAccentBrightBrush}"
-                            CornerRadius="11">
-                            <TextBlock
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center"
-                                FontFamily="Segoe UI Symbol"
-                                FontSize="20"
-                                Text="☁" />
-                        </Border>
+                        <Image
+                            Width="36"
+                            Height="36"
+                            Source="ms-appx:///Assets/Square44x44Logo.scale-200.png"
+                            Stretch="Uniform" />
                         <StackPanel VerticalAlignment="Center" Spacing="-2">
                             <TextBlock
                                 FontSize="15"
@@ -336,19 +339,27 @@
             </Border>
         </Grid>
 
+        <Grid
+            x:Name="RightRail"
+            Width="252"
+            Margin="0,88,18,116"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Stretch"
+            RowSpacing="10">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
         <Border
             x:Name="LayerPanel"
-            Width="224"
-            MaxHeight="620"
-            Margin="0,88,18,0"
             Padding="12"
-            HorizontalAlignment="Right"
-            VerticalAlignment="Top"
+            VerticalAlignment="Stretch"
             Style="{StaticResource AISkyElevatedPanelStyle}">
             <Grid RowSpacing="10">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
@@ -385,7 +396,6 @@
                 <ListView
                     x:Name="LayerList"
                     Grid.Row="1"
-                    MaxHeight="470"
                     AutomationProperties.Name="预报图层"
                     IsTabStop="True"
                     ItemsSource="{x:Bind LayerItems}"
@@ -402,16 +412,16 @@
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <Border
-                                    Width="34"
-                                    Height="34"
+                                    Width="40"
+                                    Height="40"
                                     VerticalAlignment="Center"
-                                    Background="{Binding Brush}"
-                                    CornerRadius="10">
-                                    <Border
-                                        Margin="1"
-                                        BorderBrush="#38FFFFFF"
-                                        BorderThickness="1"
-                                        CornerRadius="9" />
+                                    Background="{ThemeResource AISkyCountBrush}"
+                                    BorderBrush="#52FFFFFF"
+                                    BorderThickness="1"
+                                    CornerRadius="12">
+                                    <Image
+                                        Source="{Binding Thumbnail}"
+                                        Stretch="UniformToFill" />
                                 </Border>
                                 <StackPanel
                                     Grid.Column="1"
@@ -454,11 +464,8 @@
 
         <Border
             x:Name="ColorBarPanel"
-            Width="324"
-            Margin="0,0,18,116"
+            Grid.Row="1"
             Padding="14,11"
-            HorizontalAlignment="Right"
-            VerticalAlignment="Bottom"
             Style="{StaticResource AISkyFloatingPanelStyle}">
             <StackPanel Spacing="7">
                 <Grid>
@@ -508,6 +515,7 @@
                 </Grid>
             </StackPanel>
         </Border>
+        </Grid>
 
         <Border
             x:Name="TimelinePanel"
@@ -546,7 +554,7 @@
                         Style="{StaticResource CaptionTextBlockStyle}"
                         Text="等待本地索引" />
                 </StackPanel>
-                <Grid Grid.Column="2" RowSpacing="3">
+                <Grid Grid.Column="2" RowSpacing="5">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
@@ -575,17 +583,20 @@
                             Style="{StaticResource CaptionTextBlockStyle}"
                             Text="--" />
                     </Grid>
-                    <Slider
-                        x:Name="TimelineSlider"
+                    <ScrollViewer
                         Grid.Row="1"
-                        AutomationProperties.Name="预报时间轴"
-                        LargeChange="8"
-                        Maximum="0"
-                        Minimum="0"
-                        SmallChange="1"
-                        StepFrequency="1"
-                        Value="0"
-                        ValueChanged="TimelineSlider_ValueChanged" />
+                        MaxHeight="50"
+                        AutomationProperties.Name="按日期分组的预报时间轴"
+                        HorizontalScrollBarVisibility="Auto"
+                        HorizontalScrollMode="Enabled"
+                        VerticalScrollBarVisibility="Disabled"
+                        VerticalScrollMode="Disabled"
+                        ZoomMode="Disabled">
+                        <StackPanel
+                            x:Name="TimelineDaysHost"
+                            Orientation="Horizontal"
+                            Spacing="8" />
+                    </ScrollViewer>
                 </Grid>
                 <Button
                     x:Name="FillSeriesButton"

@@ -38,6 +38,7 @@ if hasattr(sys.stderr, "reconfigure"):
 
 UTC_FORMAT = "%Y%m%d_%H%M"
 ISO_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+CACHE_SCHEMA_VERSION = 2
 FIXED_MINUTES = ((1, 30), (4, 30), (7, 30), (10, 30), (13, 30), (16, 30), (19, 30), (22, 30))
 FILE_RE = re.compile(
     r"^(?P<model>AISky-(?:Energy|SDS))_"
@@ -60,6 +61,9 @@ PALETTES = {
     "dust": ["#F8FAFC", "#FDE68A", "#F59E0B", "#EF4444", "#7F1D1D", "#581C87"],
     "rain": ["#F8FAFC", "#BAE6FD", "#22D3EE", "#14B8A6", "#16A34A", "#166534"],
     "height": ["#EEF2FF", "#A5B4FC", "#38BDF8", "#14B8A6", "#FDE047", "#F97316"],
+    "moisture": ["#F8FAFC", "#CFFAFE", "#67E8F9", "#14B8A6", "#0F766E", "#134E4A"],
+    "land": ["#F8FAFC", "#DCFCE7", "#86EFAC", "#22C55E", "#15803D", "#365314"],
+    "aerosol": ["#F8FAFC", "#DBEAFE", "#60A5FA", "#A78BFA", "#F472B6", "#9D174D"],
 }
 
 
@@ -82,9 +86,22 @@ class AuthenticationError(PermissionError):
 
 
 COMMON_LAYERS = (
-    LayerSpec("t2m", "T2M", "2 米气温", "°C", ("T2M",), (-50.0, 45.0), tuple(PALETTES["temperature"]), offset=-273.15),
+    LayerSpec("t2m", "T2M", "近地面气温", "°C", ("T2M", "TLML"), (-50.0, 45.0), tuple(PALETTES["temperature"]), offset=-273.15),
+    LayerSpec("t10m", "T10M", "10 米气温", "°C", ("T10M",), (-50.0, 45.0), tuple(PALETTES["temperature"]), offset=-273.15),
+    LayerSpec("ts", "TS", "地表皮肤温度", "°C", ("TS",), (-60.0, 60.0), tuple(PALETTES["temperature"]), offset=-273.15),
+    LayerSpec("qv2m", "QV2M", "近地面比湿", "g/kg", ("QV2M", "QLML"), (0.0, 24.0), tuple(PALETTES["moisture"]), scale=1000.0),
+    LayerSpec("qv10m", "QV10M", "10 米比湿", "g/kg", ("QV10M",), (0.0, 24.0), tuple(PALETTES["moisture"]), scale=1000.0),
     LayerSpec("swgdn", "SWGDN", "地表短波辐射", "W/m²", ("SWGDN",), (0.0, 1200.0), tuple(PALETTES["solar"])),
+    LayerSpec("swgdnclr", "SWGDNCLR", "晴空地表短波", "W/m²", ("SWGDNCLR",), (0.0, 1200.0), tuple(PALETTES["solar"])),
+    LayerSpec("swtdn", "SWTDN", "大气顶入射短波", "W/m²", ("SWTDN",), (0.0, 1400.0), tuple(PALETTES["solar"])),
+    LayerSpec("swgnt", "SWGNT", "地表净短波", "W/m²", ("SWGNT",), (0.0, 1000.0), tuple(PALETTES["solar"])),
     LayerSpec("cldtot", "CLDTOT", "总云量", "%", ("CLDTOT",), (0.0, 100.0), tuple(PALETTES["cloud"]), scale=100.0),
+    LayerSpec("cldlow", "CLDLOW", "低云量", "%", ("CLDLOW",), (0.0, 100.0), tuple(PALETTES["cloud"]), scale=100.0),
+    LayerSpec("cldmid", "CLDMID", "中云量", "%", ("CLDMID",), (0.0, 100.0), tuple(PALETTES["cloud"]), scale=100.0),
+    LayerSpec("cldhgh", "CLDHGH", "高云量", "%", ("CLDHGH",), (0.0, 100.0), tuple(PALETTES["cloud"]), scale=100.0),
+    LayerSpec("tautot", "TAUTOT", "云光学厚度", "", ("TAUTOT",), (0.0, 80.0), tuple(PALETTES["cloud"])),
+    LayerSpec("albedo", "ALBEDO", "地表反照率", "%", ("ALBEDO",), (0.0, 100.0), tuple(PALETTES["land"]), scale=100.0),
+    LayerSpec("totexttau", "TOTEXTTAU", "总气溶胶光学厚度", "", ("TOTEXTTAU",), (0.0, 1.0), tuple(PALETTES["aerosol"])),
     LayerSpec(
         "wind10",
         "WIND10",
@@ -95,10 +112,44 @@ COMMON_LAYERS = (
         tuple(PALETTES["wind"]),
         vector_aliases=(("U10M", "U10", "ULML"), ("V10M", "V10", "VLML")),
     ),
+    LayerSpec(
+        "wind50",
+        "WIND50",
+        "50 米风速",
+        "m/s",
+        ("WIND50",),
+        (0.0, 30.0),
+        tuple(PALETTES["wind"]),
+        vector_aliases=(("U50M",), ("V50M",)),
+    ),
     LayerSpec("slp", "SLP", "海平面气压", "hPa", ("SLP", "MSLP"), (940.0, 1050.0), tuple(PALETTES["pressure"]), scale=0.01),
+    LayerSpec("ps", "PS", "地表气压", "hPa", ("PS",), (500.0, 1050.0), tuple(PALETTES["pressure"]), scale=0.01),
+    LayerSpec("tqv", "TQV", "整层可降水量", "kg/m²", ("TQV",), (0.0, 75.0), tuple(PALETTES["moisture"])),
     LayerSpec("duexttau", "DUEXTTAU", "沙尘光学厚度", "", ("DUEXTTAU", "DUEXTTAU550"), (0.0, 0.85), tuple(PALETTES["dust"])),
+    LayerSpec("duextt25", "DUEXTT25", "PM2.5 沙尘消光 AOT", "", ("DUEXTT25",), (0.0, 0.45), tuple(PALETTES["dust"])),
+    LayerSpec("duscatau", "DUSCATAU", "沙尘散射 AOT", "", ("DUSCATAU",), (0.0, 0.8), tuple(PALETTES["dust"])),
+    LayerSpec("duscat25", "DUSCAT25", "PM2.5 沙尘散射 AOT", "", ("DUSCAT25",), (0.0, 0.42), tuple(PALETTES["dust"])),
+    LayerSpec("ducmass", "DUCMASS", "沙尘柱质量", "mg/m²", ("DUCMASS",), (0.0, 800.0), tuple(PALETTES["dust"]), scale=1_000_000.0),
+    LayerSpec("ducmass25", "DUCMASS25", "PM2.5 沙尘柱质量", "mg/m²", ("DUCMASS25",), (0.0, 200.0), tuple(PALETTES["dust"]), scale=1_000_000.0),
+    LayerSpec("dusmass", "DUSMASS", "地表沙尘浓度", "μg/m³", ("DUSMASS",), (0.0, 350.0), tuple(PALETTES["dust"]), scale=1_000_000_000.0),
+    LayerSpec("dusmass25", "DUSMASS25", "地表 PM2.5 沙尘浓度", "μg/m³", ("DUSMASS25",), (0.0, 90.0), tuple(PALETTES["dust"]), scale=1_000_000_000.0),
+    LayerSpec(
+        "duflux",
+        "DUFLUX",
+        "沙尘柱质量通量",
+        "kg/(m·s)",
+        ("DUFLUX",),
+        (0.0, 0.004),
+        tuple(PALETTES["dust"]),
+        vector_aliases=(("DUFLUXU",), ("DUFLUXV",)),
+    ),
     LayerSpec("prectot", "PRECTOT", "总降水", "mm/day", ("PRECTOT",), (0.0, 50.0), tuple(PALETTES["rain"]), scale=86400.0),
     LayerSpec("pblh", "PBLH", "边界层高度", "m", ("PBLH",), (0.0, 3000.0), tuple(PALETTES["height"])),
+    LayerSpec("ustar", "USTAR", "地表摩擦速度", "m/s", ("USTAR",), (0.0, 1.2), tuple(PALETTES["wind"])),
+    LayerSpec("z0m", "Z0M", "地表粗糙度", "m", ("Z0M",), (0.0, 5.0), tuple(PALETTES["land"])),
+    LayerSpec("gwettop", "GWETTOP", "表层土壤湿度", "%", ("GWETTOP",), (0.0, 100.0), tuple(PALETTES["moisture"]), scale=100.0),
+    LayerSpec("frsno", "FRSNO", "积雪覆盖率", "%", ("FRSNO",), (0.0, 100.0), tuple(PALETTES["cloud"]), scale=100.0),
+    LayerSpec("lai", "LAI", "叶面积指数", "", ("LAI",), (0.0, 7.0), tuple(PALETTES["land"])),
 )
 
 
@@ -393,6 +444,7 @@ def process_netcdf(
         raise ValueError("NetCDF 中没有找到当前版本支持的气象变量。")
 
     manifest = {
+        "cacheSchemaVersion": CACHE_SCHEMA_VERSION,
         "id": run_id,
         "model": file_info["model"],
         "version": file_info["version"],
@@ -433,6 +485,12 @@ def render_cache_ready(
         run_directory / "wind10.v.field.u16",
     )
     if not all(path.is_file() and path.stat().st_size > 0 for path in required):
+        return False
+    try:
+        manifest = json.loads((run_directory / "run.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    if manifest.get("cacheSchemaVersion") != CACHE_SCHEMA_VERSION:
         return False
     with sqlite3.connect(database_path) as connection:
         row = connection.execute(

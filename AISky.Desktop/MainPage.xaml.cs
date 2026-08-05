@@ -30,6 +30,10 @@ public sealed partial class MainPage : Page
     private bool _backgroundEventsAttached;
     private bool _isPlaying;
     private bool _firstRunBusy;
+    private int _currentForecastIndex;
+    private string? _lastLayerSetKey;
+    private string? _lastMapSeriesKey;
+    private readonly List<Button> _timelineSlotButtons = [];
 
     public ObservableCollection<LayerItem> LayerItems { get; } = [];
 
@@ -129,7 +133,7 @@ public sealed partial class MainPage : Page
                     : "本地地图与 NetCDF 栅格已连接";
                 SendThemeToMap();
                 SendDisplayOptionsToMap();
-                SendSelectedRunToMap();
+                SendSelectedRunToMap(forceFull: true);
                 await App.Services.Log.WriteAsync("INFO", "Map host reported ready.");
                 return;
             }
@@ -476,27 +480,17 @@ public sealed partial class MainPage : Page
 
     private void RootLayout_SizeChanged(object sender, SizeChangedEventArgs e)
     {
-        if (LayerPanel is null || LayerList is null || ColorBarPanel is null)
+        if (RightRail is null || LayerPanel is null || LayerList is null || ColorBarPanel is null)
         {
             return;
         }
 
         var width = e.NewSize.Width;
         var height = e.NewSize.Height;
-        var compact = width < 980;
-        var wide = width >= 1420;
-        var topInset = compact ? 78d : wide ? 88d : 86d;
-        var timelineInset = compact ? 104d : wide ? 116d : 110d;
-        var colorBarVisible = height >= 650 && width >= 700;
+        var colorBarVisible = height >= 640 && width >= 760;
         ColorBarPanel.Visibility = colorBarVisible
             ? Visibility.Visible
             : Visibility.Collapsed;
-
-        var panelCap = compact ? 430d : wide ? 560d : 480d;
-        var colorBarReserve = colorBarVisible ? 92d : 12d;
-        var availableHeight = height - topInset - timelineInset - colorBarReserve;
-        LayerPanel.MaxHeight = Math.Min(panelCap, Math.Max(230, availableHeight));
-        LayerList.MaxHeight = Math.Max(110, LayerPanel.MaxHeight - 156);
     }
 
     private async void AutoSyncButton_Changed(object sender, RoutedEventArgs e)
@@ -723,13 +717,14 @@ public sealed partial class MainPage : Page
         PostMapMessage(new { type = "set-layer", layer = layer.Id });
     }
 
-    private void TimelineSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
+    private void TimelineSlot_Click(object sender, RoutedEventArgs e)
     {
-        if (_suppressSelection || _currentForecastRuns.Count == 0)
+        if (sender is not Button { Tag: int index }
+            || index < 0
+            || index >= _currentForecastRuns.Count)
         {
             return;
         }
-        var index = Math.Clamp((int)Math.Round(e.NewValue), 0, _currentForecastRuns.Count - 1);
         SelectRun(_currentForecastRuns[index], updateForecastPicker: true);
     }
 
@@ -750,8 +745,8 @@ public sealed partial class MainPage : Page
             SetPlaybackState(false);
             return;
         }
-        var next = ((int)TimelineSlider.Value + 1) % _currentForecastRuns.Count;
-        TimelineSlider.Value = next;
+        var next = (_currentForecastIndex + 1) % _currentForecastRuns.Count;
+        SelectRun(_currentForecastRuns[next], updateForecastPicker: true);
     }
 
     private void ApplyIndex(
@@ -823,6 +818,7 @@ public sealed partial class MainPage : Page
             .Where(run => run.Model == model && run.InitKey == initKey)
             .OrderBy(run => run.LeadHours)
             .ToList();
+        BuildTimelineSlots();
 
         _suppressSelection = true;
         try
@@ -853,6 +849,77 @@ public sealed partial class MainPage : Page
         }
     }
 
+    private void BuildTimelineSlots()
+    {
+        if (TimelineDaysHost is null)
+        {
+            return;
+        }
+
+        TimelineDaysHost.Children.Clear();
+        _timelineSlotButtons.Clear();
+        foreach (var dayGroup in _currentForecastRuns
+                     .Select((run, index) => new { Run = run, Index = index })
+                     .GroupBy(item => item.Index / 8))
+        {
+            var dayPanel = new StackPanel
+            {
+                Spacing = 3,
+            };
+            dayPanel.Children.Add(new TextBlock
+            {
+                Text = $"第 {dayGroup.Key + 1} 天 · {FormatUtcKey(dayGroup.First().Run.ForecastKey, "MM-dd")}",
+                FontSize = 10,
+                Opacity = 0.72,
+            });
+
+            var slots = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 3,
+            };
+            foreach (var item in dayGroup)
+            {
+                var hour = FormatUtcKey(item.Run.ForecastKey, "HH");
+                var button = new Button
+                {
+                    Tag = item.Index,
+                    Content = hour,
+                    FontSize = 10,
+                    FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                    Style = (Style)Resources["TimelineSlotButtonStyle"],
+                };
+                button.Click += TimelineSlot_Click;
+                ToolTipService.SetToolTip(
+                    button,
+                    $"{FormatUtcKey(item.Run.ForecastKey, "MM-dd HH:mm")} UTC · {FormatLead(item.Run.LeadHours)}");
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
+                    button,
+                    $"选择 {FormatUtcKey(item.Run.ForecastKey, "MM-dd HH:mm")} UTC");
+                slots.Children.Add(button);
+                _timelineSlotButtons.Add(button);
+            }
+            dayPanel.Children.Add(slots);
+            TimelineDaysHost.Children.Add(dayPanel);
+        }
+    }
+
+    private void UpdateTimelineSelection()
+    {
+        for (var index = 0; index < _timelineSlotButtons.Count; index++)
+        {
+            var isSelected = index == _currentForecastIndex;
+            _timelineSlotButtons[index].Style = (Style)Resources[
+                isSelected
+                    ? "TimelineSlotButtonSelectedStyle"
+                    : "TimelineSlotButtonStyle"];
+            if (isSelected)
+            {
+                _timelineSlotButtons[index].StartBringIntoView();
+            }
+        }
+    }
+
     private void SelectRun(ForecastRun? run, bool updateForecastPicker)
     {
         _selectedRun = run;
@@ -865,9 +932,10 @@ public sealed partial class MainPage : Page
             ForecastTimeText.Text = "暂无预报数据";
             FirstForecastText.Text = "--";
             LastForecastText.Text = "--";
-            TimelineSlider.Maximum = 0;
             FillSeriesButton.Visibility = Visibility.Collapsed;
             CompactRunButton.Content = $"{GetSelectedModel()} · 暂无数据";
+            _lastLayerSetKey = null;
+            _lastMapSeriesKey = null;
             UpdateEmptyColorBar();
             SendSelectedRunToMap();
             return;
@@ -886,29 +954,27 @@ public sealed partial class MainPage : Page
             }
         }
 
-        var previousLayer = (LayerList.SelectedItem as LayerItem)?.Id;
-        LayerItems.Clear();
-        foreach (var layer in run.Layers)
+        var layerSetKey =
+            $"{run.Model}|{run.InitKey}|{string.Join(',', run.Layers.Select(layer => layer.Id))}";
+        if (!string.Equals(_lastLayerSetKey, layerSetKey, StringComparison.Ordinal))
         {
-            LayerItems.Add(LayerItem.FromForecastLayer(layer));
+            var previousLayer = (LayerList.SelectedItem as LayerItem)?.Id;
+            LayerItems.Clear();
+            foreach (var layer in run.Layers)
+            {
+                LayerItems.Add(LayerItem.FromForecastLayer(layer));
+            }
+            LayerCountText.Text = LayerItems.Count.ToString(CultureInfo.InvariantCulture);
+            var layerIndex = LayerItems
+                .Select((layer, index) => new { layer.Id, Index = index })
+                .FirstOrDefault(item => item.Id == previousLayer)?.Index ?? 0;
+            LayerList.SelectedIndex = LayerItems.Count == 0 ? -1 : layerIndex;
+            _lastLayerSetKey = layerSetKey;
         }
-        LayerCountText.Text = LayerItems.Count.ToString(CultureInfo.InvariantCulture);
-        var layerIndex = LayerItems
-            .Select((layer, index) => new { layer.Id, Index = index })
-            .FirstOrDefault(item => item.Id == previousLayer)?.Index ?? 0;
-        LayerList.SelectedIndex = LayerItems.Count == 0 ? -1 : layerIndex;
 
         var forecastIndex = Math.Max(0, _currentForecastRuns.FindIndex(item => item.Id == run.Id));
-        _suppressSelection = true;
-        try
-        {
-            TimelineSlider.Maximum = Math.Max(0, _currentForecastRuns.Count - 1);
-            TimelineSlider.Value = forecastIndex;
-        }
-        finally
-        {
-            _suppressSelection = false;
-        }
+        _currentForecastIndex = forecastIndex;
+        UpdateTimelineSelection();
         LeadText.Text = FormatLead(run.LeadHours);
         TimelineSummaryText.Text = _currentForecastRuns.Count == 1
             ? "仅 1 个时次 · 可补齐序列"
@@ -930,7 +996,7 @@ public sealed partial class MainPage : Page
         SendSelectedRunToMap();
     }
 
-    private void SendSelectedRunToMap()
+    private void SendSelectedRunToMap(bool forceFull = false)
     {
         if (!_mapReady)
         {
@@ -938,6 +1004,7 @@ public sealed partial class MainPage : Page
         }
         if (_selectedRun is null)
         {
+            _lastMapSeriesKey = null;
             PostMapMessage(new { type = "set-data", run = (object?)null });
             return;
         }
@@ -945,60 +1012,25 @@ public sealed partial class MainPage : Page
         var run = _selectedRun;
         var selectedLayer = (LayerList.SelectedItem as LayerItem)?.Id
             ?? run.Layers.FirstOrDefault()?.Id;
+        var seriesKey =
+            $"{run.Model}|{run.InitKey}|{_currentForecastRuns.Count}|{_currentForecastRuns.FirstOrDefault()?.Id}|{_currentForecastRuns.LastOrDefault()?.Id}";
+        if (!forceFull && string.Equals(_lastMapSeriesKey, seriesKey, StringComparison.Ordinal))
+        {
+            PostMapMessage(new
+            {
+                type = "set-frame",
+                layer = selectedLayer,
+                run = CreateMapRun(run),
+            });
+            return;
+        }
+
+        _lastMapSeriesKey = seriesKey;
         PostMapMessage(new
         {
             type = "set-data",
             layer = selectedLayer,
-            run = new
-            {
-                id = run.Id,
-                model = run.Model,
-                version = run.Version,
-                initKey = run.InitKey,
-                forecastKey = run.ForecastKey,
-                leadHours = run.LeadHours,
-                grid = new
-                {
-                    lat = GridExtent(run.Grid.Latitude),
-                    lon = GridExtent(run.Grid.Longitude),
-                    rows = run.Grid.Rows,
-                    cols = run.Grid.Columns,
-                },
-                layers = run.Layers.Select(layer => new
-                {
-                    id = layer.Id,
-                    label = layer.Label,
-                    cn = layer.Name,
-                    unit = layer.Unit,
-                    range = layer.Range,
-                    palette = layer.Palette,
-                    fieldUrl = BuildDataUrl(layer.Field),
-                    sampleUrl = string.IsNullOrWhiteSpace(layer.Sample)
-                        ? null
-                        : BuildDataUrl(layer.Sample),
-                    fieldInfo = new
-                    {
-                        rows = layer.FieldInfo.Rows,
-                        cols = layer.FieldInfo.Columns,
-                        missing = layer.FieldInfo.Missing,
-                        range = layer.FieldInfo.Range,
-                    },
-                    vector = layer.Vector is null
-                        ? null
-                        : new
-                        {
-                            uUrl = BuildDataUrl(layer.Vector.U),
-                            vUrl = BuildDataUrl(layer.Vector.V),
-                            fieldInfo = new
-                            {
-                                rows = layer.Vector.FieldInfo.Rows,
-                                cols = layer.Vector.FieldInfo.Columns,
-                                missing = layer.Vector.FieldInfo.Missing,
-                                range = layer.Vector.FieldInfo.Range,
-                            },
-                        },
-                }),
-            },
+            run = CreateMapRun(run),
             series = _currentForecastRuns.Select(seriesRun => new
             {
                 id = seriesRun.Id,
@@ -1028,6 +1060,58 @@ public sealed partial class MainPage : Page
             }),
         });
     }
+
+    private static object CreateMapRun(ForecastRun run) =>
+        new
+        {
+            id = run.Id,
+            model = run.Model,
+            version = run.Version,
+            initKey = run.InitKey,
+            forecastKey = run.ForecastKey,
+            leadHours = run.LeadHours,
+            grid = new
+            {
+                lat = GridExtent(run.Grid.Latitude),
+                lon = GridExtent(run.Grid.Longitude),
+                rows = run.Grid.Rows,
+                cols = run.Grid.Columns,
+            },
+            layers = run.Layers.Select(layer => new
+            {
+                id = layer.Id,
+                label = layer.Label,
+                cn = layer.Name,
+                unit = layer.Unit,
+                range = layer.Range,
+                palette = layer.Palette,
+                fieldUrl = BuildDataUrl(layer.Field),
+                sampleUrl = string.IsNullOrWhiteSpace(layer.Sample)
+                    ? null
+                    : BuildDataUrl(layer.Sample),
+                fieldInfo = new
+                {
+                    rows = layer.FieldInfo.Rows,
+                    cols = layer.FieldInfo.Columns,
+                    missing = layer.FieldInfo.Missing,
+                    range = layer.FieldInfo.Range,
+                },
+                vector = layer.Vector is null
+                    ? null
+                    : new
+                    {
+                        uUrl = BuildDataUrl(layer.Vector.U),
+                        vUrl = BuildDataUrl(layer.Vector.V),
+                        fieldInfo = new
+                        {
+                            rows = layer.Vector.FieldInfo.Rows,
+                            cols = layer.Vector.FieldInfo.Columns,
+                            missing = layer.Vector.FieldInfo.Missing,
+                            range = layer.Vector.FieldInfo.Range,
+                        },
+                    },
+            }),
+        };
 
     private void SendThemeToMap() =>
         PostMapMessage(new
@@ -1173,6 +1257,7 @@ public sealed class LayerItem
     public string Unit { get; set; } = "";
     public List<double> Range { get; set; } = [];
     public List<string> Palette { get; set; } = [];
+    public string Thumbnail { get; set; } = "";
     public Brush Brush { get; set; } = new SolidColorBrush(ParseColor("#4682B4"));
 
     public static LayerItem FromForecastLayer(ForecastLayer layer)
@@ -1188,6 +1273,7 @@ public sealed class LayerItem
             Unit = layer.Unit,
             Range = layer.Range,
             Palette = palette,
+            Thumbnail = $"ms-appx:///Assets/Layers/{layer.Id}.png",
             Brush = CreateBrush(palette),
         };
     }

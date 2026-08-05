@@ -21,7 +21,13 @@
         <TitleBar
             x:Name="AppTitleBar"
             Title="AISky"
-            Subtitle="智慧气象桌面平台" />
+            Subtitle="智慧气象桌面平台">
+            <TitleBar.IconSource>
+                <BitmapIconSource
+                    ShowAsMonochrome="False"
+                    UriSource="ms-appx:///Assets/AppIcon.png" />
+            </TitleBar.IconSource>
+        </TitleBar>
 
         <Frame x:Name="RootFrame" Grid.Row="1" />
     </Grid>

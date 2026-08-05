@@ -10,6 +10,20 @@ colors:
   mist-white: "#F2F8FA"
   slate: "#17313A"
   muted-slate: "#476871"
+  map-mist: "#BFDDE0"
+  deep-slate: "#102C37"
+  coordinate-slate: "#355760"
+  quiet-slate: "#647F87"
+  soft-slate: "#6A858D"
+  success-mint: "#36C6AD"
+  focus-cyan: "#5FD7E5"
+  cool-outline: "rgba(109, 154, 163, 0.36)"
+  success-halo: "rgba(54, 198, 173, 0.18)"
+  quiet-action: "rgba(54, 135, 148, 0.09)"
+  quiet-action-hover: "rgba(54, 135, 148, 0.16)"
+  reading-outline: "rgba(80, 177, 182, 0.16)"
+  chart-surface: "rgba(221, 242, 243, 0.44)"
+  chart-outline: "rgba(71, 150, 159, 0.10)"
 typography:
   title:
     fontFamily: "Segoe UI Variable, Microsoft YaHei UI, sans-serif"
@@ -26,8 +40,19 @@ typography:
     fontSize: "12px"
     fontWeight: 600
     lineHeight: 1.35
+  micro:
+    fontSize: "11px"
+  compact:
+    fontSize: "13px"
+  subsection:
+    fontSize: "17px"
+  reading:
+    fontSize: "27px"
 rounded:
+  hairline: "1px"
   control: "10px"
+  soft-control: "11px"
+  card: "12px"
   panel: "14px"
   elevated-panel: "16px"
   point-panel: "18px"
@@ -167,4 +192,3 @@ Short white trails animate on their own transparent canvas at approximately 30fp
 - **Don't** add model comparison; it is outside the product.
 - **Don't** use decorative gradients or accent stripes on ordinary cards.
 - **Don't** redraw the full weather raster for every wind-animation frame.
-
