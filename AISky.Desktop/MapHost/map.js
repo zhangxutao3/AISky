@@ -13,6 +13,7 @@ const pointValidTime = document.querySelector("#pointValidTime");
 const pointRange = document.querySelector("#pointRange");
 const pointCount = document.querySelector("#pointCount");
 const pointChart = document.querySelector("#pointChart");
+const pointChartBase = document.createElement("canvas");
 const pointChartEmpty = document.querySelector("#pointChartEmpty");
 const pointFirstTime = document.querySelector("#pointFirstTime");
 const pointLastTime = document.querySelector("#pointLastTime");
@@ -42,6 +43,8 @@ let dragState = null;
 let suppressMapClick = false;
 let pointSelection = null;
 let pointSeriesData = [];
+let pointChartPoints = [];
+let pointChartRatio = 1;
 let mapTheme = "light";
 let fieldOpacity = 0.93;
 let showGrid = true;
@@ -266,19 +269,47 @@ async function mapWithConcurrency(items, limit, worker) {
   return results;
 }
 
+function paintPointChartFrame() {
+  if (
+    pointChartBase.width !== pointChart.width ||
+    pointChartBase.height !== pointChart.height
+  ) {
+    return;
+  }
+
+  const chartContext = pointChart.getContext("2d");
+  chartContext.clearRect(0, 0, pointChart.width, pointChart.height);
+  chartContext.drawImage(pointChartBase, 0, 0);
+  const activePoint = pointChartPoints.find((point) => point?.item.id === activeRun?.id);
+  if (!activePoint) return;
+
+  chartContext.beginPath();
+  chartContext.arc(activePoint.x, activePoint.y, 4.5 * pointChartRatio, 0, Math.PI * 2);
+  chartContext.fillStyle = "#ffb84a";
+  chartContext.fill();
+  chartContext.lineWidth = 2 * pointChartRatio;
+  chartContext.strokeStyle = "#ffffff";
+  chartContext.stroke();
+}
+
 function drawPointChart(series) {
   const ratio = Math.min(window.devicePixelRatio || 1, 2);
   const width = Math.max(1, Math.round(pointChart.clientWidth * ratio));
   const height = Math.max(1, Math.round(pointChart.clientHeight * ratio));
   pointChart.width = width;
   pointChart.height = height;
-  const chartContext = pointChart.getContext("2d");
+  pointChartBase.width = width;
+  pointChartBase.height = height;
+  pointChartRatio = ratio;
+  pointChartPoints = [];
+  const chartContext = pointChartBase.getContext("2d");
   chartContext.clearRect(0, 0, width, height);
 
   const valid = series.filter((item) => Number.isFinite(item.value));
   if (valid.length === 0) {
     pointChartEmpty.hidden = false;
     pointChartEmpty.textContent = "该格点暂无有效预报值";
+    pointChart.getContext("2d").clearRect(0, 0, width, height);
     return;
   }
 
@@ -319,7 +350,7 @@ function drawPointChart(series) {
     chartContext.fillText(formatValue(value, 1), padding.left - 6 * ratio, y);
   }
 
-  const points = series.map((item, index) => {
+  pointChartPoints = series.map((item, index) => {
     if (!Number.isFinite(item.value)) return null;
     return {
       x: padding.left + slotWidth * index,
@@ -334,7 +365,7 @@ function drawPointChart(series) {
   chartContext.beginPath();
   let firstPoint = null;
   let lastPoint = null;
-  for (const point of points) {
+  for (const point of pointChartPoints) {
     if (!point) continue;
     if (!firstPoint) {
       firstPoint = point;
@@ -354,7 +385,7 @@ function drawPointChart(series) {
 
   chartContext.beginPath();
   let started = false;
-  for (const point of points) {
+  for (const point of pointChartPoints) {
     if (!point) {
       started = false;
       continue;
@@ -371,17 +402,7 @@ function drawPointChart(series) {
   chartContext.lineJoin = "round";
   chartContext.lineCap = "round";
   chartContext.stroke();
-
-  for (const point of points) {
-    if (!point || point.item.id !== activeRun?.id) continue;
-    chartContext.beginPath();
-    chartContext.arc(point.x, point.y, 4.5 * ratio, 0, Math.PI * 2);
-    chartContext.fillStyle = "#ffb84a";
-    chartContext.fill();
-    chartContext.lineWidth = 2 * ratio;
-    chartContext.strokeStyle = "#ffffff";
-    chartContext.stroke();
-  }
+  paintPointChartFrame();
 }
 
 function updatePointCurrentReading() {
@@ -397,7 +418,7 @@ function updatePointCurrentReading() {
   pointValidTime.textContent = activeRun
     ? `${formatForecastKey(activeRun.forecastKey)} ${displayTimeZoneLabel()} · ${activeRun.model} · ${activeLead >= 0 ? "+" : ""}${activeLead}h`
     : "暂无本地预报数据";
-  drawPointChart(pointSeriesData);
+  paintPointChartFrame();
 }
 
 async function showPointDetails(lon, lat) {
@@ -459,7 +480,7 @@ async function showPointDetails(lon, lat) {
   pointFirstTime.textContent = formatForecastKey(series[0]?.forecastKey);
   pointLastTime.textContent = formatForecastKey(series.at(-1)?.forecastKey);
   pointStatus.textContent = validCount > 0
-    ? "曲线来自当前起报的本地抽样缓存；主数值来自完整栅格"
+    ? `已加载当前起报的 ${validCount} 个有效预报时次`
     : "该格点没有有效值，可尝试选择其他位置或图层";
   pointSeriesData = series;
   requestAnimationFrame(() => drawPointChart(series));
@@ -1028,6 +1049,7 @@ async function loadAssets() {
 }
 
 canvas.addEventListener("pointerdown", (event) => {
+  canvas.focus({ preventScroll: true });
   canvas.setPointerCapture(event.pointerId);
   dragState = {
     x: event.clientX,
@@ -1098,6 +1120,23 @@ pointClose.addEventListener("click", () => {
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !pointPanel.hidden) {
     pointClose.click();
+    return;
+  }
+  if (event.target !== canvas) return;
+
+  if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+    event.preventDefault();
+    window.chrome?.webview?.postMessage({
+      type: "step-frame",
+      delta: event.key === "ArrowLeft" ? -1 : 1,
+    });
+  } else if (event.key === " ") {
+    event.preventDefault();
+    window.chrome?.webview?.postMessage({ type: "toggle-playback" });
+  } else if (event.key === "Home") {
+    event.preventDefault();
+    Object.assign(view, worldView);
+    requestRender();
   }
 });
 

@@ -31,6 +31,7 @@ public sealed partial class MainPage : Page
     private bool _isPlaying;
     private bool _firstRunBusy;
     private int _currentForecastIndex;
+    private int _lastTimelineSelectionIndex = -1;
     private int _displayUtcOffsetHours;
     private string? _lastLayerSetKey;
     private string? _lastMapSeriesKey;
@@ -154,14 +155,35 @@ public sealed partial class MainPage : Page
         {
             using var document = JsonDocument.Parse(e.WebMessageAsJson);
             var root = document.RootElement;
-            if (root.TryGetProperty("type", out var type)
-                && type.GetString() == "map-error")
+            if (!root.TryGetProperty("type", out var type))
             {
-                var message = root.TryGetProperty("message", out var messageNode)
-                    ? messageNode.GetString() ?? "未知错误"
-                    : "未知错误";
-                ServiceStatusText.Text = $"地图数据加载失败：{message}";
-                await App.Services.Log.WriteAsync("ERROR", $"MapHost: {message}");
+                return;
+            }
+
+            switch (type.GetString())
+            {
+                case "map-error":
+                    var message = root.TryGetProperty("message", out var messageNode)
+                        ? messageNode.GetString() ?? "未知错误"
+                        : "未知错误";
+                    ServiceStatusText.Text = $"地图数据加载失败：{message}";
+                    await App.Services.Log.WriteAsync("ERROR", $"MapHost: {message}");
+                    break;
+                case "step-frame":
+                    var delta = root.TryGetProperty("delta", out var deltaNode)
+                        ? Math.Sign(deltaNode.GetInt32())
+                        : 0;
+                    if (delta != 0)
+                    {
+                        StepForecast(delta, wrap: false);
+                    }
+                    break;
+                case "toggle-playback":
+                    if (_currentForecastRuns.Count > 1)
+                    {
+                        SetPlaybackState(!_isPlaying);
+                    }
+                    break;
             }
         }
         catch (JsonException)
@@ -879,7 +901,28 @@ public sealed partial class MainPage : Page
             SetPlaybackState(false);
             return;
         }
-        var next = (_currentForecastIndex + 1) % _currentForecastRuns.Count;
+        StepForecast(1, wrap: true);
+    }
+
+    private void StepForecast(int delta, bool wrap)
+    {
+        if (_currentForecastRuns.Count == 0 || delta == 0)
+        {
+            return;
+        }
+
+        var next = _currentForecastIndex + Math.Sign(delta);
+        next = wrap
+            ? (next + _currentForecastRuns.Count) % _currentForecastRuns.Count
+            : Math.Clamp(next, 0, _currentForecastRuns.Count - 1);
+        if (next == _currentForecastIndex)
+        {
+            ServiceStatusText.Text = delta < 0
+                ? "已经是第一个预报时刻"
+                : "已经是最后一个预报时刻";
+            return;
+        }
+
         SelectRun(_currentForecastRuns[next], updateForecastPicker: true);
     }
 
@@ -992,6 +1035,7 @@ public sealed partial class MainPage : Page
 
         TimelineDaysHost.Children.Clear();
         _timelineSlotButtons.Clear();
+        _lastTimelineSelectionIndex = -1;
         foreach (var dayGroup in _currentForecastRuns
                      .Select((run, index) => new { Run = run, Index = index })
                      .GroupBy(item => item.Index / 8))
@@ -1040,18 +1084,25 @@ public sealed partial class MainPage : Page
 
     private void UpdateTimelineSelection()
     {
-        for (var index = 0; index < _timelineSlotButtons.Count; index++)
+        if (_lastTimelineSelectionIndex >= 0
+            && _lastTimelineSelectionIndex < _timelineSlotButtons.Count
+            && _lastTimelineSelectionIndex != _currentForecastIndex)
         {
-            var isSelected = index == _currentForecastIndex;
-            _timelineSlotButtons[index].Style = (Style)Resources[
-                isSelected
-                    ? "TimelineSlotButtonSelectedStyle"
-                    : "TimelineSlotButtonStyle"];
-            if (isSelected)
-            {
-                _timelineSlotButtons[index].StartBringIntoView();
-            }
+            _timelineSlotButtons[_lastTimelineSelectionIndex].Style =
+                (Style)Resources["TimelineSlotButtonStyle"];
         }
+
+        if (_currentForecastIndex < 0
+            || _currentForecastIndex >= _timelineSlotButtons.Count)
+        {
+            _lastTimelineSelectionIndex = -1;
+            return;
+        }
+
+        var selectedButton = _timelineSlotButtons[_currentForecastIndex];
+        selectedButton.Style = (Style)Resources["TimelineSlotButtonSelectedStyle"];
+        selectedButton.StartBringIntoView();
+        _lastTimelineSelectionIndex = _currentForecastIndex;
     }
 
     private void SelectRun(ForecastRun? run, bool updateForecastPicker)

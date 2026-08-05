@@ -125,7 +125,7 @@
 
         <WebView2
             x:Name="MapWebView"
-            AutomationProperties.HelpText="拖动可平移地图，滚轮可缩放，点击可查看格点值与多时次曲线"
+            AutomationProperties.HelpText="拖动平移、滚轮缩放、点击查看格点曲线；左右方向键切换时次，空格播放或暂停"
             AutomationProperties.Name="气象预报地图"
             NavigationCompleted="MapWebView_NavigationCompleted" />
 
