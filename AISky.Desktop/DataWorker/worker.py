@@ -77,6 +77,10 @@ class LayerSpec:
     vector_aliases: tuple[tuple[str, ...], tuple[str, ...]] | None = None
 
 
+class AuthenticationError(PermissionError):
+    """The remote share explicitly rejected its access credential."""
+
+
 COMMON_LAYERS = (
     LayerSpec("t2m", "T2M", "2 米气温", "°C", ("T2M",), (-50.0, 45.0), tuple(PALETTES["temperature"]), offset=-273.15),
     LayerSpec("swgdn", "SWGDN", "地表短波辐射", "W/m²", ("SWGDN",), (0.0, 1200.0), tuple(PALETTES["solar"])),
@@ -333,7 +337,19 @@ def process_netcdf(
         lon = np.asarray(dataset[lon_name][:], dtype=np.float64).squeeze()
 
         for index, spec in enumerate(COMMON_LAYERS):
-            data = read_layer(dataset, spec)
+            vector_components: tuple[np.ndarray, np.ndarray] | None = None
+            if spec.vector_aliases is not None:
+                u_name = find_variable(dataset, spec.vector_aliases[0])
+                v_name = find_variable(dataset, spec.vector_aliases[1])
+                if u_name and v_name:
+                    u_data = read_array(dataset, u_name)
+                    v_data = read_array(dataset, v_name)
+                    data = np.sqrt(u_data * u_data + v_data * v_data).astype(np.float32)
+                    vector_components = (u_data, v_data)
+                else:
+                    data = read_layer(dataset, spec)
+            else:
+                data = read_layer(dataset, spec)
             if data is None:
                 continue
             percent = 8 + int((index + 1) / len(COMMON_LAYERS) * 76)
@@ -348,20 +364,30 @@ def process_netcdf(
             sample_path = run_directory / f"{spec.id}.sample.json"
             field_info = write_field(field_path, data, spec.value_range)
             atomic_json(sample_path, downsample_grid(data), compact=True)
-            layers.append(
-                {
-                    "id": spec.id,
-                    "label": spec.label,
-                    "cn": spec.name_cn,
-                    "unit": spec.unit,
-                    "range": list(spec.value_range),
-                    "palette": list(spec.palette),
-                    "field": field_path.relative_to(render_root).as_posix(),
-                    "fieldInfo": field_info,
-                    "sample": sample_path.relative_to(render_root).as_posix(),
-                    "stats": stats_for(data),
+            layer_payload: dict[str, Any] = {
+                "id": spec.id,
+                "label": spec.label,
+                "cn": spec.name_cn,
+                "unit": spec.unit,
+                "range": list(spec.value_range),
+                "palette": list(spec.palette),
+                "field": field_path.relative_to(render_root).as_posix(),
+                "fieldInfo": field_info,
+                "sample": sample_path.relative_to(render_root).as_posix(),
+                "stats": stats_for(data),
+            }
+            if vector_components is not None:
+                vector_range = (-50.0, 50.0)
+                u_path = run_directory / f"{spec.id}.u.field.u16"
+                v_path = run_directory / f"{spec.id}.v.field.u16"
+                vector_info = write_field(u_path, vector_components[0], vector_range)
+                write_field(v_path, vector_components[1], vector_range)
+                layer_payload["vector"] = {
+                    "u": u_path.relative_to(render_root).as_posix(),
+                    "v": v_path.relative_to(render_root).as_posix(),
+                    "fieldInfo": vector_info,
                 }
-            )
+            layers.append(layer_payload)
 
     if not layers:
         raise ValueError("NetCDF 中没有找到当前版本支持的气象变量。")
@@ -390,6 +416,30 @@ def process_netcdf(
     update_run_index(database_path, source, manifest_path, manifest, checksum)
     emit("progress", operation="parse", stage="index", percent=96, message="正在刷新本地索引")
     return manifest
+
+
+def render_cache_ready(
+    source: Path,
+    render_root: Path,
+    database_path: Path,
+) -> bool:
+    """Return true when a valid indexed run already has scalar and wind caches."""
+    info = parse_filename(source)
+    run_directory = render_root / "runs" / info["runId"]
+    required = (
+        run_directory / "run.json",
+        run_directory / "wind10.field.u16",
+        run_directory / "wind10.u.field.u16",
+        run_directory / "wind10.v.field.u16",
+    )
+    if not all(path.is_file() and path.stat().st_size > 0 for path in required):
+        return False
+    with sqlite3.connect(database_path) as connection:
+        row = connection.execute(
+            "SELECT is_plot_ready FROM forecast_runs WHERE id=?",
+            (info["runId"],),
+        ).fetchone()
+    return row is not None and int(row[0]) == 1
 
 
 def update_run_index(
@@ -584,43 +634,15 @@ def response_is_netcdf(first_chunk: bytes) -> bool:
     return first_chunk.startswith(b"CDF") or first_chunk[:8] == b"\x89HDF\r\n\x1a\n"
 
 
-def download_share_file(
-    session: requests.Session,
-    url: str,
-    password: str,
+def write_download_response(
+    response: requests.Response,
+    iterator: Iterable[bytes],
+    first_chunk: bytes,
     output: Path,
     job_id: str,
-) -> bool:
-    page = session.get(url, timeout=(15, 35))
-    if page.status_code in (404, 410):
-        return False
-    page.raise_for_status()
-    token = csrf_token(page.text)
-    if token is None:
-        return False
-
-    response = session.post(
-        url,
-        data={"csrfmiddlewaretoken": token, "password": password},
-        stream=True,
-        timeout=(15, 180),
-    )
-    if response.status_code == 403:
-        response.close()
-        raise PermissionError("访问密码验证失败，请重新填写数据访问密码。")
-    if response.status_code in (404, 410):
-        return False
-    response.raise_for_status()
-    iterator = response.iter_content(chunk_size=1024 * 1024)
-    first_chunk = next(iterator, b"")
-    if not response_is_netcdf(first_chunk):
-        response.close()
-        raise PermissionError(
-            "访问密码验证失败，或服务器返回了非 NetCDF 内容。"
-        )
-
+) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
-    temporary = output.with_suffix(output.suffix + ".part")
+    temporary = output.with_suffix(output.suffix + f".{job_id}.part")
     received = 0
     total = int(response.headers.get("content-length") or 0)
     last_update = 0.0
@@ -644,6 +666,61 @@ def download_share_file(
                 )
                 last_update = now
     temporary.replace(output)
+
+
+def download_share_file(
+    session: requests.Session,
+    url: str,
+    password: str,
+    output: Path,
+    job_id: str,
+) -> bool:
+    # Current CSTCloud links may return the NetCDF file directly.  Older or
+    # protected shares first return an HTML password form.  Stream the first
+    # response so an 80+ MB file is never decoded as HTML or buffered in RAM.
+    page = session.get(url, stream=True, timeout=(15, 180))
+    if page.status_code in (404, 410):
+        page.close()
+        return False
+    if page.status_code == 403:
+        page.close()
+        raise AuthenticationError("访问密码验证失败，请重新填写数据访问密码。")
+    page.raise_for_status()
+    page_iterator = page.iter_content(chunk_size=1024 * 1024)
+    first_chunk = next(page_iterator, b"")
+    if response_is_netcdf(first_chunk):
+        write_download_response(page, page_iterator, first_chunk, output, job_id)
+        page.close()
+        return True
+
+    page_content = b"".join(chain((first_chunk,), page_iterator))
+    page.close()
+    token = csrf_token(page_content.decode("utf-8", errors="replace"))
+    if token is None:
+        return False
+
+    response = session.post(
+        url,
+        data={"csrfmiddlewaretoken": token, "password": password},
+        stream=True,
+        timeout=(15, 180),
+    )
+    if response.status_code == 403:
+        response.close()
+        raise AuthenticationError("访问密码验证失败，请重新填写数据访问密码。")
+    if response.status_code in (404, 410):
+        return False
+    response.raise_for_status()
+    iterator = response.iter_content(chunk_size=1024 * 1024)
+    first_chunk = next(iterator, b"")
+    if not response_is_netcdf(first_chunk):
+        response.close()
+        raise AuthenticationError(
+            "访问密码验证失败，或服务器返回了非 NetCDF 内容。"
+        )
+
+    write_download_response(response, iterator, first_chunk, output, job_id)
+    response.close()
     return True
 
 
@@ -717,7 +794,11 @@ def run_download_range(args: argparse.Namespace) -> dict[str, Any]:
                 percent=round(init_index / len(init_times) * 100, 1),
                 message=f"正在检查 {args.model} · {nice_time(init_key)}",
             )
-            for lead in range(0, args.max_lead_hours + 1, 3):
+            # AISky forecast products begin at +3h.  A complete 15-day run is
+            # therefore exactly 120 files for the full range: +3h, +6h, ... +360h.
+            minimum_lead = max(3, args.min_lead_hours)
+            minimum_lead += (-minimum_lead) % 3
+            for lead in range(minimum_lead, args.max_lead_hours + 1, 3):
                 forecast_time = init_time + timedelta(hours=lead)
                 forecast_key = forecast_time.strftime(UTC_FORMAT)
                 existing_target = (
@@ -725,8 +806,26 @@ def run_download_range(args: argparse.Namespace) -> dict[str, Any]:
                     / args.model
                     / init_key
                 )
-                versions = (locked_version,) if locked_version else tuple(
-                    f"V{number:02d}" for number in range(args.max_version, 0, -1)
+                existing_files = sorted(
+                    existing_target.glob(
+                        f"{args.model}_{init_key}+{forecast_key}_V*.nc"
+                    ),
+                    reverse=True,
+                )
+                existing_version = (
+                    parse_filename(existing_files[0])["version"]
+                    if existing_files
+                    else None
+                )
+                versions = (
+                    (locked_version,)
+                    if locked_version
+                    else (existing_version,)
+                    if existing_version
+                    else tuple(
+                        f"V{number:02d}"
+                        for number in range(args.max_version, 0, -1)
+                    )
                 )
                 found = False
                 for version in versions:
@@ -735,7 +834,16 @@ def run_download_range(args: argparse.Namespace) -> dict[str, Any]:
                     if target.exists():
                         try:
                             ensure_netcdf(target)
-                            process_netcdf(target, Path(args.render_root), Path(args.database))
+                            if not render_cache_ready(
+                                target,
+                                Path(args.render_root),
+                                Path(args.database),
+                            ):
+                                process_netcdf(
+                                    target,
+                                    Path(args.render_root),
+                                    Path(args.database),
+                                )
                             skipped += 1
                             found = True
                             locked_version = version
@@ -796,7 +904,7 @@ def run_download_range(args: argparse.Namespace) -> dict[str, Any]:
                             forecast_key, version, url, target, "not_found",
                             "远端未找到该版本文件"
                         )
-                    except PermissionError as error:
+                    except AuthenticationError as error:
                         failed += 1
                         upsert_download_job(
                             Path(args.database), job_id, args.model, init_key,
@@ -860,7 +968,7 @@ def run_sync_latest(args: argparse.Namespace) -> dict[str, Any]:
         probe_args = argparse.Namespace(**vars(args))
         probe_args.start = init_key
         probe_args.end = init_key
-        probe_args.max_lead_hours = 0
+        probe_args.max_lead_hours = 3
         probe = run_download_range(probe_args)
         for name in totals:
             totals[name] += int(probe[name])
@@ -1023,6 +1131,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--end")
     parser.add_argument("--password", default="")
     parser.add_argument("--max-lead-hours", type=int, default=360)
+    parser.add_argument("--min-lead-hours", type=int, default=3)
     parser.add_argument("--max-version", type=int, default=9)
     parser.add_argument("--base-url")
     parser.add_argument("--probe-days", type=int, default=3)

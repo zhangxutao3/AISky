@@ -10,6 +10,7 @@
     SizeChanged="RootLayout_SizeChanged"
     mc:Ignorable="d">
 
+    <!-- Visual direction: airy cloud-white controls, slate typography, and restrained mint/sky iridescence over a map-first canvas. -->
     <Grid x:Name="RootLayout" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup x:Name="WindowWidthStates">
@@ -20,6 +21,7 @@
                     <VisualState.Setters>
                         <Setter Target="RunPickerBorder.Visibility" Value="Collapsed" />
                         <Setter Target="CompactRunButton.Visibility" Value="Visible" />
+                        <Setter Target="BrandLockup.Visibility" Value="Collapsed" />
                         <Setter Target="UpdateStatus.Visibility" Value="Collapsed" />
                         <Setter Target="LayerPanel.Width" Value="148" />
                         <Setter Target="LayerPanel.MaxHeight" Value="430" />
@@ -42,6 +44,7 @@
                     <VisualState.Setters>
                         <Setter Target="RunPickerBorder.Visibility" Value="Visible" />
                         <Setter Target="CompactRunButton.Visibility" Value="Collapsed" />
+                        <Setter Target="BrandLockup.Visibility" Value="Collapsed" />
                         <Setter Target="UpdateStatus.Visibility" Value="Collapsed" />
                         <Setter Target="LayerPanel.Width" Value="208" />
                         <Setter Target="LayerPanel.MaxHeight" Value="480" />
@@ -64,6 +67,7 @@
                     <VisualState.Setters>
                         <Setter Target="RunPickerBorder.Visibility" Value="Visible" />
                         <Setter Target="CompactRunButton.Visibility" Value="Collapsed" />
+                        <Setter Target="BrandLockup.Visibility" Value="Visible" />
                         <Setter Target="UpdateStatus.Visibility" Value="Visible" />
                         <Setter Target="LayerPanel.Width" Value="224" />
                         <Setter Target="LayerPanel.MaxHeight" Value="560" />
@@ -130,11 +134,46 @@
             </Grid.ColumnDefinitions>
 
             <Border Grid.Column="0" Style="{StaticResource AISkyFloatingPanelStyle}">
-                <CommandBar
-                    Background="Transparent"
-                    ClosedDisplayMode="Compact"
-                    DefaultLabelPosition="Collapsed"
-                    IsDynamicOverflowEnabled="True">
+                <Grid ColumnSpacing="4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel
+                        x:Name="BrandLockup"
+                        Margin="12,5,5,5"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal"
+                        Spacing="8">
+                        <Border
+                            Width="34"
+                            Height="34"
+                            Background="{StaticResource AISkyAccentBrightBrush}"
+                            CornerRadius="11">
+                            <TextBlock
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                FontFamily="Segoe UI Symbol"
+                                FontSize="20"
+                                Text="☁" />
+                        </Border>
+                        <StackPanel VerticalAlignment="Center" Spacing="-2">
+                            <TextBlock
+                                FontSize="15"
+                                FontWeight="SemiBold"
+                                Text="AISky" />
+                            <TextBlock
+                                Foreground="{ThemeResource AISkyTextMutedBrush}"
+                                FontSize="10"
+                                Text="本地预报" />
+                        </StackPanel>
+                    </StackPanel>
+                    <CommandBar
+                        Grid.Column="1"
+                        Background="Transparent"
+                        ClosedDisplayMode="Compact"
+                        DefaultLabelPosition="Collapsed"
+                        IsDynamicOverflowEnabled="True">
                     <AppBarButton
                         AutomationProperties.Name="刷新本地数据状态"
                         Click="RefreshButton_Click"
@@ -165,7 +204,7 @@
                         Icon="Globe"
                         Label="全球"
                         ToolTipService.ToolTip="恢复全球视图" />
-                    <CommandBar.SecondaryCommands>
+                        <CommandBar.SecondaryCommands>
                         <AppBarButton
                             x:Name="SyncNowButton"
                             AutomationProperties.Name="立即同步最新数据"
@@ -201,8 +240,9 @@
                             Click="SettingsButton_Click"
                             Icon="Setting"
                             Label="设置" />
-                    </CommandBar.SecondaryCommands>
-                </CommandBar>
+                        </CommandBar.SecondaryCommands>
+                    </CommandBar>
+                </Grid>
             </Border>
 
             <Button
@@ -310,6 +350,7 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
                 <Grid Margin="4,2,4,0">
                     <Grid.ColumnDefinitions>
@@ -398,6 +439,16 @@
                     Style="{StaticResource CaptionTextBlockStyle}"
                     Text="颜色和值域随产品自动更新"
                     TextWrapping="Wrap" />
+                <ToggleSwitch
+                    x:Name="WindAnimationToggle"
+                    Grid.Row="3"
+                    Margin="4,2,4,0"
+                    AutomationProperties.Name="切换风场流线"
+                    Header="风场流线"
+                    IsOn="True"
+                    OffContent="关闭"
+                    OnContent="开启"
+                    Toggled="WindAnimationToggle_Toggled" />
             </Grid>
         </Border>
 
@@ -408,7 +459,7 @@
             Padding="14,11"
             HorizontalAlignment="Right"
             VerticalAlignment="Bottom"
-            Style="{StaticResource AISkyDarkFloatingPanelStyle}">
+            Style="{StaticResource AISkyFloatingPanelStyle}">
             <StackPanel Spacing="7">
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -417,13 +468,12 @@
                     </Grid.ColumnDefinitions>
                     <TextBlock
                         x:Name="ColorLayerText"
-                        Foreground="White"
                         Style="{StaticResource BodyStrongTextBlockStyle}"
                         Text="等待数据" />
                     <TextBlock
                         x:Name="ColorUnitText"
                         Grid.Column="1"
-                        Foreground="{StaticResource AISkyDarkMutedTextBrush}"
+                        Foreground="{ThemeResource AISkyTextMutedBrush}"
                         Style="{StaticResource CaptionTextBlockStyle}"
                         Text="" />
                 </Grid>
@@ -445,14 +495,14 @@
                     </Grid.ColumnDefinitions>
                     <TextBlock
                         x:Name="ColorMinimumText"
-                        Foreground="{StaticResource AISkyDarkMutedTextBrush}"
+                        Foreground="{ThemeResource AISkyTextMutedBrush}"
                         Style="{StaticResource CaptionTextBlockStyle}"
                         Text="--" />
                     <TextBlock
                         x:Name="ColorMaximumText"
                         Grid.Column="1"
                         HorizontalAlignment="Right"
-                        Foreground="{StaticResource AISkyDarkMutedTextBrush}"
+                        Foreground="{ThemeResource AISkyTextMutedBrush}"
                         Style="{StaticResource CaptionTextBlockStyle}"
                         Text="--" />
                 </Grid>
@@ -464,7 +514,7 @@
             Margin="116,0,18,16"
             Padding="14,11"
             VerticalAlignment="Bottom"
-            Style="{StaticResource AISkyDarkFloatingPanelStyle}">
+            Style="{StaticResource AISkyFloatingPanelStyle}">
             <Grid ColumnSpacing="14">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
@@ -487,13 +537,12 @@
                     Spacing="0">
                     <TextBlock
                         x:Name="LeadText"
-                        Foreground="White"
                         FontSize="22"
                         FontWeight="SemiBold"
                         Text="+3h" />
                     <TextBlock
                         x:Name="TimelineSummaryText"
-                        Foreground="{StaticResource AISkyDarkMutedTextBrush}"
+                        Foreground="{ThemeResource AISkyTextMutedBrush}"
                         Style="{StaticResource CaptionTextBlockStyle}"
                         Text="等待本地索引" />
                 </StackPanel>
@@ -510,20 +559,19 @@
                         </Grid.ColumnDefinitions>
                         <TextBlock
                             x:Name="FirstForecastText"
-                            Foreground="{StaticResource AISkyDarkMutedTextBrush}"
+                            Foreground="{ThemeResource AISkyTextMutedBrush}"
                             Style="{StaticResource CaptionTextBlockStyle}"
                             Text="--" />
                         <TextBlock
                             x:Name="ForecastTimeText"
                             Grid.Column="1"
-                            Foreground="White"
                             Style="{StaticResource BodyStrongTextBlockStyle}"
                             Text="08-03 16:30 · +3h UTC" />
                         <TextBlock
                             x:Name="LastForecastText"
                             Grid.Column="2"
                             HorizontalAlignment="Right"
-                            Foreground="{StaticResource AISkyDarkMutedTextBrush}"
+                            Foreground="{ThemeResource AISkyTextMutedBrush}"
                             Style="{StaticResource CaptionTextBlockStyle}"
                             Text="--" />
                     </Grid>
@@ -547,13 +595,13 @@
                     Padding="0"
                     VerticalAlignment="Center"
                     AutomationProperties.Name="补齐当前起报预报序列"
-                    Background="#18FFFFFF"
-                    BorderBrush="#30FFFFFF"
+                    Background="{ThemeResource AISkyCountBrush}"
+                    BorderBrush="{ThemeResource AISkyChromeBorderBrush}"
                     Click="FillSeriesButton_Click"
                     Content="&#xE895;"
                     CornerRadius="12"
                     FontFamily="Segoe Fluent Icons"
-                    Foreground="White"
+                    Foreground="{StaticResource AISkyAccentBrush}"
                     ToolTipService.ToolTip="从数据服务器补齐当前起报的预报序列"
                     Visibility="Collapsed" />
             </Grid>

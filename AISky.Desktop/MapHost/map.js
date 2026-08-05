@@ -1,5 +1,7 @@
 const canvas = document.querySelector("#map");
 const context = canvas.getContext("2d", { alpha: false, desynchronized: true });
+const windCanvas = document.querySelector("#wind");
+const windContext = windCanvas.getContext("2d", { alpha: true, desynchronized: true });
 const coordinateLabel = document.querySelector("#coordinates");
 const layerLabel = document.querySelector("#layerName");
 const leadLabel = document.querySelector("#leadName");
@@ -42,15 +44,24 @@ let mapTheme = "light";
 let fieldOpacity = 0.93;
 let showGrid = true;
 let showPlaces = true;
+let showWindAnimation = true;
+let windField = null;
+let windParticles = [];
+let windFrame = 0;
+let windLastFrame = 0;
 
 function clamp(value, minimum, maximum) {
   return Math.max(minimum, Math.min(maximum, value));
 }
 
+function wrapLongitude(lon) {
+  return ((lon + 180) % 360 + 360) % 360 - 180;
+}
+
 function setConstrainedView(candidate) {
   const width = clamp(candidate.right - candidate.left, 12, 360);
   const height = clamp(candidate.top - candidate.bottom, 8, 170);
-  const left = clamp(candidate.left, worldView.left, worldView.right - width);
+  const left = wrapLongitude(candidate.left);
   const top = clamp(candidate.top, worldView.bottom + height, worldView.top);
   Object.assign(view, {
     left,
@@ -69,7 +80,7 @@ function project(lon, lat, width, height) {
 
 function unproject(x, y) {
   return [
-    view.left + (x / canvas.clientWidth) * (view.right - view.left),
+    wrapLongitude(view.left + (x / canvas.clientWidth) * (view.right - view.left)),
     view.top - (y / canvas.clientHeight) * (view.top - view.bottom),
   ];
 }
@@ -127,8 +138,8 @@ function normalizeLongitude(lon, first, last) {
   return lon;
 }
 
-function sampleField(field, lon, lat) {
-  const { grid, info, values } = field;
+function sampleValues(field, values, lon, lat) {
+  const { grid, info } = field;
   const firstLat = grid.lat[0];
   const lastLat = grid.lat[1];
   const firstLon = grid.lon[0];
@@ -152,6 +163,17 @@ function sampleField(field, lon, lat) {
   if (encoded === info.missing) return null;
   const [low, high] = info.range;
   return low + (encoded / 65534) * (high - low);
+}
+
+function sampleField(field, lon, lat) {
+  return sampleValues(field, field.values, lon, lat);
+}
+
+function sampleVector(field, lon, lat) {
+  if (!field?.uValues || !field?.vValues) return null;
+  const u = sampleValues(field, field.uValues, lon, lat);
+  const v = sampleValues(field, field.vValues, lon, lat);
+  return Number.isFinite(u) && Number.isFinite(v) ? { u, v } : null;
 }
 
 function sampleGrid(values, grid, lon, lat) {
@@ -254,15 +276,15 @@ function drawPointChart(series) {
   };
   const plotWidth = width - padding.left - padding.right;
   const plotHeight = height - padding.top - padding.bottom;
-  const baseY = padding.top + plotHeight;
-  const slotWidth = plotWidth / Math.max(1, series.length);
-  const barWidth = Math.max(2 * ratio, Math.min(9 * ratio, slotWidth * 0.62));
+  const slotWidth = plotWidth / Math.max(1, series.length - 1);
 
   chartContext.font = `${10 * ratio}px "Segoe UI Variable"`;
   chartContext.textAlign = "right";
   chartContext.textBaseline = "middle";
-  chartContext.fillStyle = mapTheme === "dark" ? "#b8d4da" : "#c5dce1";
-  chartContext.strokeStyle = "rgba(205, 230, 234, 0.15)";
+  chartContext.fillStyle = mapTheme === "dark" ? "#b8d4da" : "#55727b";
+  chartContext.strokeStyle = mapTheme === "dark"
+    ? "rgba(205, 230, 234, 0.15)"
+    : "rgba(61, 117, 126, 0.14)";
   chartContext.lineWidth = ratio;
   for (let index = 0; index < 3; index += 1) {
     const amount = index / 2;
@@ -275,15 +297,68 @@ function drawPointChart(series) {
     chartContext.fillText(formatValue(value, 1), padding.left - 6 * ratio, y);
   }
 
-  for (let index = 0; index < series.length; index += 1) {
-    const item = series[index];
-    if (!Number.isFinite(item.value)) continue;
-    const normalized = (item.value - minimum) / (maximum - minimum);
-    const barHeight = Math.max(2 * ratio, normalized * (plotHeight - 3 * ratio));
-    const x = padding.left + slotWidth * (index + 0.5) - barWidth / 2;
-    const isCurrent = item.id === activeRun?.id;
-    chartContext.fillStyle = isCurrent ? "#f2b63e" : "#20b7d0";
-    chartContext.fillRect(x, baseY - barHeight, barWidth, barHeight);
+  const points = series.map((item, index) => {
+    if (!Number.isFinite(item.value)) return null;
+    return {
+      x: padding.left + slotWidth * index,
+      y: padding.top + (1 - (item.value - minimum) / (maximum - minimum)) * plotHeight,
+      item,
+    };
+  });
+
+  const area = chartContext.createLinearGradient(0, padding.top, 0, padding.top + plotHeight);
+  area.addColorStop(0, "rgba(37, 190, 198, 0.28)");
+  area.addColorStop(1, "rgba(37, 190, 198, 0.015)");
+  chartContext.beginPath();
+  let firstPoint = null;
+  let lastPoint = null;
+  for (const point of points) {
+    if (!point) continue;
+    if (!firstPoint) {
+      firstPoint = point;
+      chartContext.moveTo(point.x, point.y);
+    } else {
+      chartContext.lineTo(point.x, point.y);
+    }
+    lastPoint = point;
+  }
+  if (firstPoint && lastPoint) {
+    chartContext.lineTo(lastPoint.x, padding.top + plotHeight);
+    chartContext.lineTo(firstPoint.x, padding.top + plotHeight);
+    chartContext.closePath();
+    chartContext.fillStyle = area;
+    chartContext.fill();
+  }
+
+  chartContext.beginPath();
+  let started = false;
+  for (const point of points) {
+    if (!point) {
+      started = false;
+      continue;
+    }
+    if (!started) {
+      chartContext.moveTo(point.x, point.y);
+      started = true;
+    } else {
+      chartContext.lineTo(point.x, point.y);
+    }
+  }
+  chartContext.strokeStyle = "#16aebe";
+  chartContext.lineWidth = 2.25 * ratio;
+  chartContext.lineJoin = "round";
+  chartContext.lineCap = "round";
+  chartContext.stroke();
+
+  for (const point of points) {
+    if (!point || point.item.id !== activeRun?.id) continue;
+    chartContext.beginPath();
+    chartContext.arc(point.x, point.y, 4.5 * ratio, 0, Math.PI * 2);
+    chartContext.fillStyle = "#ffb84a";
+    chartContext.fill();
+    chartContext.lineWidth = 2 * ratio;
+    chartContext.strokeStyle = "#ffffff";
+    chartContext.stroke();
   }
 }
 
@@ -400,29 +475,39 @@ function prepareFieldTexture(field) {
 function drawRealField(width, height, field) {
   drawEmptyField(width, height);
   const raster = prepareFieldTexture(field);
-  const sourceX = ((view.left - textureBounds.left)
-    / (textureBounds.right - textureBounds.left)) * raster.width;
   const sourceY = ((textureBounds.top - view.top)
     / (textureBounds.top - textureBounds.bottom)) * raster.height;
-  const sourceWidth = ((view.right - view.left)
-    / (textureBounds.right - textureBounds.left)) * raster.width;
   const sourceHeight = ((view.top - view.bottom)
     / (textureBounds.top - textureBounds.bottom)) * raster.height;
   context.save();
   context.globalAlpha = fieldOpacity;
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = "high";
-  context.drawImage(
-    raster,
-    sourceX,
-    sourceY,
-    sourceWidth,
-    sourceHeight,
-    0,
-    0,
-    width,
-    height,
-  );
+  const longitudeSpan = view.right - view.left;
+  const firstTile = Math.floor((view.left - textureBounds.left) / 360);
+  const lastTile = Math.floor((view.right - textureBounds.left - 1e-9) / 360);
+  for (let tile = firstTile; tile <= lastTile; tile += 1) {
+    const tileLeft = textureBounds.left + tile * 360;
+    const tileRight = textureBounds.right + tile * 360;
+    const visibleLeft = Math.max(view.left, tileLeft);
+    const visibleRight = Math.min(view.right, tileRight);
+    if (visibleRight <= visibleLeft) continue;
+    const sourceX = ((visibleLeft - tileLeft) / 360) * raster.width;
+    const sourceWidth = ((visibleRight - visibleLeft) / 360) * raster.width;
+    const destinationX = ((visibleLeft - view.left) / longitudeSpan) * width;
+    const destinationWidth = ((visibleRight - visibleLeft) / longitudeSpan) * width;
+    context.drawImage(
+      raster,
+      sourceX,
+      sourceY,
+      sourceWidth,
+      sourceHeight,
+      destinationX,
+      0,
+      destinationWidth,
+      height,
+    );
+  }
   context.restore();
 }
 
@@ -446,8 +531,9 @@ function drawGrid(width, height) {
     context.moveTo(x, 0);
     context.lineTo(x, height);
     context.stroke();
-    const suffix = lon < 0 ? "W" : "E";
-    context.fillText(`${Math.abs(lon)}°${suffix}`, x + 6, 92 * window.devicePixelRatio);
+    const displayLon = wrapLongitude(lon);
+    const suffix = displayLon < 0 ? "W" : "E";
+    context.fillText(`${Math.abs(displayLon)}°${suffix}`, x + 6, 92 * window.devicePixelRatio);
   }
   for (let lat = Math.ceil(view.bottom / latStep) * latStep; lat <= view.top; lat += latStep) {
     const [, y] = project(view.left, lat, width, height);
@@ -469,19 +555,24 @@ function drawCoastlines(width, height) {
   context.lineWidth = 1.1 * window.devicePixelRatio;
   context.lineJoin = "round";
   context.lineCap = "round";
-  for (const line of coastlines) {
-    let started = false;
-    context.beginPath();
-    for (const point of line) {
-      const [x, y] = project(point[0], point[1], width, height);
-      if (!started) {
-        context.moveTo(x, y);
-        started = true;
-      } else {
-        context.lineTo(x, y);
+  const firstCopy = Math.floor((view.left + 180) / 360) - 1;
+  const lastCopy = Math.floor((view.right + 180) / 360) + 1;
+  for (let copy = firstCopy; copy <= lastCopy; copy += 1) {
+    const longitudeOffset = copy * 360;
+    for (const line of coastlines) {
+      let started = false;
+      context.beginPath();
+      for (const point of line) {
+        const [x, y] = project(point[0] + longitudeOffset, point[1], width, height);
+        if (!started) {
+          context.moveTo(x, y);
+          started = true;
+        } else {
+          context.lineTo(x, y);
+        }
       }
+      context.stroke();
     }
-    context.stroke();
   }
 
   context.fillStyle = mapTheme === "dark"
@@ -502,15 +593,22 @@ function drawCoastlines(width, height) {
   const longitudeSpan = view.right - view.left;
   const rankLimit = longitudeSpan > 90 ? 1 : 2;
   const candidates = places
+    .flatMap((item) => {
+      const copies = [];
+      for (let copy = firstCopy; copy <= lastCopy; copy += 1) {
+        copies.push({ ...item, displayLon: item.lon + copy * 360 });
+      }
+      return copies;
+    })
     .filter((item) =>
-      item.lon >= view.left &&
-      item.lon <= view.right &&
+      item.displayLon >= view.left &&
+      item.displayLon <= view.right &&
       item.lat >= view.bottom &&
       item.lat <= view.top &&
       item.rank <= rankLimit)
     .sort((first, second) => first.rank - second.rank);
   for (const place of candidates) {
-    const [x, y] = project(place.lon, place.lat, width, height);
+    const [x, y] = project(place.displayLon, place.lat, width, height);
     const labelX = x + 5 * window.devicePixelRatio;
     const labelY = y - 5 * window.devicePixelRatio;
     const labelWidth = context.measureText(place.name).width;
@@ -535,7 +633,10 @@ function drawCoastlines(width, height) {
 
 function drawPointMarker(width, height) {
   if (!pointSelection) return;
-  const [x, y] = project(pointSelection.lon, pointSelection.lat, width, height);
+  const viewCenter = (view.left + view.right) / 2;
+  const displayLon = pointSelection.lon
+    + Math.round((viewCenter - pointSelection.lon) / 360) * 360;
+  const [x, y] = project(displayLon, pointSelection.lat, width, height);
   if (x < -20 || y < -20 || x > width + 20 || y > height + 20) return;
   context.save();
   context.beginPath();
@@ -565,6 +666,146 @@ async function loadField(run, layer) {
   return field;
 }
 
+async function loadWindField(run) {
+  const layer = run?.layers?.find((item) => item.id === "wind10" && item.vector);
+  if (!layer?.vector) return null;
+  const cacheKey = `${layer.vector.uUrl}|${layer.vector.vUrl}`;
+  if (fieldCache.has(cacheKey)) return fieldCache.get(cacheKey);
+  const [uResponse, vResponse] = await Promise.all([
+    fetch(layer.vector.uUrl, { cache: "force-cache" }),
+    fetch(layer.vector.vUrl, { cache: "force-cache" }),
+  ]);
+  if (!uResponse.ok || !vResponse.ok) {
+    throw new Error(`风场缓存读取失败：HTTP ${uResponse.status}/${vResponse.status}`);
+  }
+  const [uBuffer, vBuffer] = await Promise.all([
+    uResponse.arrayBuffer(),
+    vResponse.arrayBuffer(),
+  ]);
+  const uValues = new Uint16Array(uBuffer);
+  const vValues = new Uint16Array(vBuffer);
+  const info = layer.vector.fieldInfo;
+  const expected = info.rows * info.cols;
+  if (uValues.length !== expected || vValues.length !== expected) {
+    throw new Error("风场矢量尺寸不匹配");
+  }
+  const field = { uValues, vValues, info, grid: run.grid, layer, runId: run.id };
+  fieldCache.set(cacheKey, field);
+  while (fieldCache.size > 8) fieldCache.delete(fieldCache.keys().next().value);
+  return field;
+}
+
+function resizeWindCanvas() {
+  const ratio = Math.min(window.devicePixelRatio || 1, 2);
+  const width = Math.max(1, Math.round(windCanvas.clientWidth * ratio));
+  const height = Math.max(1, Math.round(windCanvas.clientHeight * ratio));
+  if (windCanvas.width !== width || windCanvas.height !== height) {
+    windCanvas.width = width;
+    windCanvas.height = height;
+    windParticles = [];
+  }
+}
+
+function resetWindParticle(particle, randomAge = true) {
+  particle.lon = view.left + Math.random() * (view.right - view.left);
+  particle.lat = view.bottom + Math.random() * (view.top - view.bottom);
+  particle.age = randomAge ? Math.floor(Math.random() * 80) : 0;
+  particle.maxAge = 55 + Math.floor(Math.random() * 55);
+}
+
+function stopWindAnimation(clear = true) {
+  if (windFrame) cancelAnimationFrame(windFrame);
+  windFrame = 0;
+  windLastFrame = 0;
+  if (clear) windContext.clearRect(0, 0, windCanvas.width, windCanvas.height);
+}
+
+function animateWind(timestamp) {
+  if (!showWindAnimation || !windField) {
+    stopWindAnimation();
+    return;
+  }
+  windFrame = requestAnimationFrame(animateWind);
+  if (timestamp - windLastFrame < 32) return;
+  windLastFrame = timestamp;
+  resizeWindCanvas();
+  const width = windCanvas.width;
+  const height = windCanvas.height;
+  const targetCount = Math.min(1150, Math.max(340, Math.round((width * height) / 3500)));
+  while (windParticles.length < targetCount) {
+    const particle = {};
+    resetWindParticle(particle);
+    windParticles.push(particle);
+  }
+  if (windParticles.length > targetCount) windParticles.length = targetCount;
+
+  windContext.globalCompositeOperation = "destination-in";
+  windContext.fillStyle = "rgba(0, 0, 0, 0.89)";
+  windContext.fillRect(0, 0, width, height);
+  windContext.globalCompositeOperation = "source-over";
+  windContext.lineCap = "round";
+  windContext.lineWidth = Math.max(0.8, window.devicePixelRatio || 1);
+
+  const lonSpan = view.right - view.left;
+  const latSpan = view.top - view.bottom;
+  for (const particle of windParticles) {
+    if (particle.age++ > particle.maxAge) {
+      resetWindParticle(particle, false);
+      continue;
+    }
+    const vector = sampleVector(windField, wrapLongitude(particle.lon), particle.lat);
+    if (!vector) {
+      resetWindParticle(particle);
+      continue;
+    }
+    const speed = Math.hypot(vector.u, vector.v);
+    const scale = 0.016 * Math.max(0.7, Math.min(2.4, 100 / lonSpan));
+    const nextLon = particle.lon + vector.u * scale;
+    const nextLat = particle.lat + vector.v * scale;
+    if (
+      nextLon < view.left || nextLon > view.right ||
+      nextLat < view.bottom || nextLat > view.top
+    ) {
+      resetWindParticle(particle);
+      continue;
+    }
+    const x1 = ((particle.lon - view.left) / lonSpan) * width;
+    const y1 = ((view.top - particle.lat) / latSpan) * height;
+    const x2 = ((nextLon - view.left) / lonSpan) * width;
+    const y2 = ((view.top - nextLat) / latSpan) * height;
+    const alpha = 0.28 + Math.min(0.55, speed / 36);
+    windContext.strokeStyle = `rgba(243, 255, 255, ${alpha})`;
+    windContext.beginPath();
+    windContext.moveTo(x1, y1);
+    windContext.lineTo(x2, y2);
+    windContext.stroke();
+    particle.lon = nextLon;
+    particle.lat = nextLat;
+  }
+}
+
+async function refreshWindAnimation(generation) {
+  if (!showWindAnimation || !activeRun) {
+    stopWindAnimation();
+    windField = null;
+    return;
+  }
+  if (windField?.runId === activeRun.id) {
+    if (!windFrame) windFrame = requestAnimationFrame(animateWind);
+    return;
+  }
+  stopWindAnimation();
+  windParticles = [];
+  try {
+    const field = await loadWindField(activeRun);
+    if (generation !== renderGeneration) return;
+    windField = field;
+    if (field) windFrame = requestAnimationFrame(animateWind);
+  } catch {
+    windField = null;
+  }
+}
+
 async function render() {
   const generation = ++renderGeneration;
   const ratio = Math.min(window.devicePixelRatio || 1, 2);
@@ -574,6 +815,7 @@ async function render() {
     canvas.width = width;
     canvas.height = height;
   }
+  resizeWindCanvas();
 
   const layer = activeRun?.layers?.find((item) => item.id === activeLayerId)
     ?? activeRun?.layers?.[0];
@@ -595,6 +837,7 @@ async function render() {
     drawGrid(width, height);
     drawCoastlines(width, height);
     drawPointMarker(width, height);
+    void refreshWindAnimation(generation);
   } catch (error) {
     activeField = null;
     drawEmptyField(width, height);
@@ -602,6 +845,7 @@ async function render() {
     drawCoastlines(width, height);
     drawPointMarker(width, height);
     dataStatus.textContent = "栅格加载失败";
+    void refreshWindAnimation(generation);
     window.chrome?.webview?.postMessage({ type: "map-error", message: String(error.message || error) });
   }
 }
@@ -750,11 +994,13 @@ window.chrome?.webview?.addEventListener("message", (event) => {
     fieldOpacity = Math.max(0.35, Math.min(1, Number(message.opacity) || 0.93));
     showGrid = message.showGrid !== false;
     showPlaces = message.showPlaces !== false;
+    showWindAnimation = message.windAnimation !== false;
     void render();
   }
 });
 
 window.addEventListener("resize", () => {
+  stopWindAnimation();
   requestRender();
   if (!pointPanel.hidden) {
     requestAnimationFrame(() => drawPointChart([]));

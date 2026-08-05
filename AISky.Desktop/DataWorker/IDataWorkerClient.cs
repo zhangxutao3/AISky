@@ -64,7 +64,7 @@ public sealed record SyncLatestRequest(
     string Model,
     string Password = "",
     int ProbeDays = 3,
-    int MaxLeadHours = 24,
+    int MaxLeadHours = 360,
     int MaxVersion = 9,
     DateTimeOffset? NowUtc = null,
     string? BaseUrl = null);
@@ -181,6 +181,21 @@ public sealed record ForecastLayer
 
     [JsonPropertyName("stats")]
     public ForecastStats Stats { get; init; } = new();
+
+    [JsonPropertyName("vector")]
+    public ForecastVectorField? Vector { get; init; }
+}
+
+public sealed record ForecastVectorField
+{
+    [JsonPropertyName("u")]
+    public string U { get; init; } = "";
+
+    [JsonPropertyName("v")]
+    public string V { get; init; } = "";
+
+    [JsonPropertyName("fieldInfo")]
+    public ForecastFieldInfo FieldInfo { get; init; } = new();
 }
 
 public sealed record ForecastFieldInfo

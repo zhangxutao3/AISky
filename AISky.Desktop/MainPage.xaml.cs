@@ -26,6 +26,7 @@ public sealed partial class MainPage : Page
     private bool _mapReady;
     private bool _suppressSelection;
     private bool _suppressAutoSync;
+    private bool _suppressDisplaySettings;
     private bool _backgroundEventsAttached;
     private bool _isPlaying;
     private bool _firstRunBusy;
@@ -47,6 +48,9 @@ public sealed partial class MainPage : Page
             AttachBackgroundEvents();
             _suppressAutoSync = true;
             AutoSyncButton.IsChecked = App.Services.CurrentSettings.AutoSyncEnabled;
+            _suppressDisplaySettings = true;
+            WindAnimationToggle.IsOn = App.Services.CurrentSettings.ShowWindAnimation;
+            _suppressDisplaySettings = false;
             _suppressAutoSync = false;
             DarkThemeToggle.IsChecked = RootLayout.ActualTheme == ElementTheme.Dark;
             ServiceStatusText.Text = "正在连接本地 NetCDF 工作进程";
@@ -452,6 +456,9 @@ public sealed partial class MainPage : Page
             _suppressAutoSync = true;
             AutoSyncButton.IsChecked = dialog.SelectedSettings.AutoSyncEnabled;
             _suppressAutoSync = false;
+            _suppressDisplaySettings = true;
+            WindAnimationToggle.IsOn = dialog.SelectedSettings.ShowWindAnimation;
+            _suppressDisplaySettings = false;
             ApplyBackgroundStatus(App.Services.BackgroundSync.CurrentStatus);
             SendDisplayOptionsToMap();
             await App.Services.Log.WriteAsync(
@@ -489,7 +496,7 @@ public sealed partial class MainPage : Page
         var colorBarReserve = colorBarVisible ? 92d : 12d;
         var availableHeight = height - topInset - timelineInset - colorBarReserve;
         LayerPanel.MaxHeight = Math.Min(panelCap, Math.Max(230, availableHeight));
-        LayerList.MaxHeight = Math.Max(130, LayerPanel.MaxHeight - 108);
+        LayerList.MaxHeight = Math.Max(110, LayerPanel.MaxHeight - 156);
     }
 
     private async void AutoSyncButton_Changed(object sender, RoutedEventArgs e)
@@ -506,6 +513,18 @@ public sealed partial class MainPage : Page
         await App.Services.Log.WriteAsync(
             "INFO",
             enabled ? "Automatic sync enabled from command bar." : "Automatic sync paused from command bar.");
+    }
+
+    private async void WindAnimationToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_suppressDisplaySettings)
+        {
+            return;
+        }
+
+        await App.Services.UpdateSettingsAsync(
+            App.Services.CurrentSettings with { ShowWindAnimation = WindAnimationToggle.IsOn });
+        SendDisplayOptionsToMap();
     }
 
     private async void SyncNowButton_Click(object sender, RoutedEventArgs e)
@@ -964,6 +983,20 @@ public sealed partial class MainPage : Page
                         missing = layer.FieldInfo.Missing,
                         range = layer.FieldInfo.Range,
                     },
+                    vector = layer.Vector is null
+                        ? null
+                        : new
+                        {
+                            uUrl = BuildDataUrl(layer.Vector.U),
+                            vUrl = BuildDataUrl(layer.Vector.V),
+                            fieldInfo = new
+                            {
+                                rows = layer.Vector.FieldInfo.Rows,
+                                cols = layer.Vector.FieldInfo.Columns,
+                                missing = layer.Vector.FieldInfo.Missing,
+                                range = layer.Vector.FieldInfo.Range,
+                            },
+                        },
                 }),
             },
             series = _currentForecastRuns.Select(seriesRun => new
@@ -1016,6 +1049,7 @@ public sealed partial class MainPage : Page
             opacity = settings.MapLayerOpacity,
             showGrid = settings.ShowMapGrid,
             showPlaces = settings.ShowMapPlaces,
+            windAnimation = settings.ShowWindAnimation,
         });
     }
 

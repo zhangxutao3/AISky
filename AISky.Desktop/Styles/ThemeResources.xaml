@@ -5,13 +5,13 @@
 
     <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Default">
-            <SolidColorBrush x:Key="AISkyChromeBrush" Color="#F2F8FA" />
-            <SolidColorBrush x:Key="AISkyChromeStrongBrush" Color="#F8FCFD" />
-            <SolidColorBrush x:Key="AISkyChromeBorderBrush" Color="#6676929C" />
-            <SolidColorBrush x:Key="AISkyLayerHoverBrush" Color="#16076B82" />
-            <SolidColorBrush x:Key="AISkyLayerSelectedBrush" Color="#2400718A" />
-            <SolidColorBrush x:Key="AISkyTextMutedBrush" Color="#B3264552" />
-            <SolidColorBrush x:Key="AISkyCountBrush" Color="#1500718A" />
+            <SolidColorBrush x:Key="AISkyChromeBrush" Color="#F4FAFBEF" />
+            <SolidColorBrush x:Key="AISkyChromeStrongBrush" Color="#FBFEFEF5" />
+            <SolidColorBrush x:Key="AISkyChromeBorderBrush" Color="#5E78A4AC" />
+            <SolidColorBrush x:Key="AISkyLayerHoverBrush" Color="#160BB1BD" />
+            <SolidColorBrush x:Key="AISkyLayerSelectedBrush" Color="#2214B5BF" />
+            <SolidColorBrush x:Key="AISkyTextMutedBrush" Color="#BA476871" />
+            <SolidColorBrush x:Key="AISkyCountBrush" Color="#1717AEB8" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Dark">
             <SolidColorBrush x:Key="AISkyChromeBrush" Color="#E31A2B34" />
@@ -33,10 +33,11 @@
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 
-    <SolidColorBrush x:Key="AISkyAccentBrush" Color="#087F9C" />
-    <SolidColorBrush x:Key="AISkyAccentBrightBrush" Color="#1AB4C8" />
-    <SolidColorBrush x:Key="AISkySunBrush" Color="#E5AB36" />
-    <SolidColorBrush x:Key="AISkySuccessBrush" Color="#20AF91" />
+    <SolidColorBrush x:Key="AISkyAccentBrush" Color="#159AAA" />
+    <SolidColorBrush x:Key="AISkyAccentBrightBrush" Color="#35C5CE" />
+    <SolidColorBrush x:Key="AISkyMintBrush" Color="#4DCEB5" />
+    <SolidColorBrush x:Key="AISkySunBrush" Color="#F3B84B" />
+    <SolidColorBrush x:Key="AISkySuccessBrush" Color="#2DB79C" />
     <SolidColorBrush x:Key="AISkyWarningBrush" Color="#E5AB36" />
     <SolidColorBrush x:Key="AISkyErrorBrush" Color="#D94D5C" />
     <SolidColorBrush x:Key="AISkyDarkChromeBrush" Color="#ED102A35" />
@@ -47,14 +48,14 @@
         <Setter Property="Background" Value="{ThemeResource AISkyChromeBrush}" />
         <Setter Property="BorderBrush" Value="{ThemeResource AISkyChromeBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="16" />
+        <Setter Property="CornerRadius" Value="14" />
     </Style>
 
     <Style x:Key="AISkyElevatedPanelStyle" TargetType="Border">
         <Setter Property="Background" Value="{ThemeResource AISkyChromeStrongBrush}" />
         <Setter Property="BorderBrush" Value="{ThemeResource AISkyChromeBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="18" />
+        <Setter Property="CornerRadius" Value="16" />
     </Style>
 
     <Style x:Key="AISkyDarkFloatingPanelStyle" TargetType="Border">
@@ -74,18 +75,18 @@
     </Style>
 
     <Style x:Key="AISkyCompactComboBoxStyle" TargetType="ComboBox">
-        <Setter Property="MinHeight" Value="38" />
-        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="MinHeight" Value="40" />
+        <Setter Property="CornerRadius" Value="10" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
     </Style>
 
     <Style x:Key="AISkyPlayButtonStyle" TargetType="Button">
-        <Setter Property="Width" Value="56" />
-        <Setter Property="Height" Value="56" />
+        <Setter Property="Width" Value="52" />
+        <Setter Property="Height" Value="52" />
         <Setter Property="Background" Value="{StaticResource AISkyAccentBrightBrush}" />
         <Setter Property="Foreground" Value="#FF082B35" />
         <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="CornerRadius" Value="28" />
+        <Setter Property="CornerRadius" Value="26" />
         <Setter Property="FontFamily" Value="Segoe Fluent Icons" />
         <Setter Property="FontSize" Value="18" />
         <Setter Property="UseSystemFocusVisuals" Value="True" />

@@ -29,6 +29,14 @@ body {
   touch-action: none;
 }
 
+#wind {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
 #map:active {
   cursor: grabbing;
 }
@@ -37,14 +45,14 @@ body {
 .coordinates,
 .point-panel {
   position: absolute;
-  color: #f5fbfc;
-  background: rgba(12, 39, 49, 0.84);
-  border: 1px solid rgba(210, 236, 242, 0.28);
+  color: #17313a;
+  background: rgba(248, 253, 253, 0.92);
+  border: 1px solid rgba(109, 154, 163, 0.36);
   box-shadow:
-    0 14px 34px rgba(5, 25, 32, 0.20),
-    0 2px 8px rgba(5, 25, 32, 0.14);
-  backdrop-filter: blur(16px) saturate(125%);
-  -webkit-backdrop-filter: blur(16px) saturate(125%);
+    0 18px 44px rgba(27, 76, 87, 0.16),
+    0 2px 8px rgba(27, 76, 87, 0.10);
+  backdrop-filter: blur(20px) saturate(118%);
+  -webkit-backdrop-filter: blur(20px) saturate(118%);
 }
 
 .map-context {
@@ -53,7 +61,7 @@ body {
   min-width: 168px;
   max-width: 310px;
   padding: 10px 12px 9px;
-  border-radius: 13px;
+  border-radius: 14px;
 }
 
 .model-badge {
@@ -70,8 +78,8 @@ body {
   height: 8px;
   flex: 0 0 auto;
   border-radius: 50%;
-  background: #f2b63e;
-  box-shadow: 0 0 0 4px rgba(242, 182, 62, 0.19);
+  background: #36c6ad;
+  box-shadow: 0 0 0 4px rgba(54, 198, 173, 0.18);
 }
 
 .model-badge strong {
@@ -81,14 +89,14 @@ body {
 
 .model-badge #leadName {
   margin-left: auto;
-  color: #bdd5dc;
+  color: #58747d;
   font-variant-numeric: tabular-nums;
 }
 
 .data-status {
   margin-top: 5px;
   overflow: hidden;
-  color: #c8dce2;
+  color: #647f87;
   font-size: 11px;
   line-height: 1.35;
   text-overflow: ellipsis;
@@ -101,7 +109,7 @@ body {
   max-width: 360px;
   padding: 8px 11px;
   border-radius: 11px;
-  color: #dcebef;
+  color: #355760;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.01em;
@@ -112,8 +120,8 @@ body {
   left: 18px;
   width: min(420px, calc(100vw - 300px));
   min-width: 350px;
-  padding: 18px;
-  border-radius: 16px;
+  padding: 20px;
+  border-radius: 18px;
   user-select: text;
   z-index: 3;
   animation: point-panel-enter 240ms cubic-bezier(0.16, 1, 0.3, 1);
@@ -142,7 +150,7 @@ body {
 
 .point-location {
   overflow: hidden;
-  color: #b9d3da;
+  color: #6a858d;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
@@ -165,8 +173,8 @@ body {
   height: 34px;
   flex: 0 0 auto;
   padding: 0;
-  color: #edf7f8;
-  background: rgba(230, 244, 246, 0.12);
+  color: #45636b;
+  background: rgba(54, 135, 148, 0.09);
   border: 0;
   border-radius: 10px;
   cursor: pointer;
@@ -193,7 +201,7 @@ body {
 }
 
 .point-close:hover {
-  background: rgba(230, 244, 246, 0.20);
+  background: rgba(54, 135, 148, 0.16);
 }
 
 .point-close:focus-visible {
@@ -208,7 +216,8 @@ body {
   margin-top: 13px;
   padding: 12px 14px;
   color: #102c37;
-  background: #e7f4f5;
+  background: linear-gradient(135deg, #eefbfa, #f4f9ff);
+  border: 1px solid rgba(80, 177, 182, 0.16);
   border-radius: 12px;
 }
 
@@ -237,12 +246,12 @@ body {
   justify-content: space-between;
   gap: 10px;
   margin-top: 14px;
-  color: #d8eaee;
+  color: #496a73;
   font-size: 12px;
 }
 
 #pointCount {
-  color: #82dbe4;
+  color: #1599aa;
   font-variant-numeric: tabular-nums;
 }
 
@@ -251,7 +260,8 @@ body {
   height: 132px;
   margin-top: 7px;
   overflow: hidden;
-  background: rgba(232, 246, 247, 0.08);
+  background: rgba(221, 242, 243, 0.44);
+  border: 1px solid rgba(71, 150, 159, 0.10);
   border-radius: 10px;
 }
 
@@ -267,7 +277,7 @@ body {
   display: grid;
   place-items: center;
   padding: 16px;
-  color: #b9d3da;
+  color: #6a858d;
   font-size: 12px;
   text-align: center;
 }
@@ -279,7 +289,7 @@ body {
 .point-chart__axis {
   justify-content: space-between;
   margin-top: 5px;
-  color: #9fbfc7;
+  color: #718c94;
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
@@ -287,7 +297,7 @@ body {
 .point-status {
   margin-top: 10px;
   overflow: hidden;
-  color: #b9d3da;
+  color: #6a858d;
   font-size: 11px;
   line-height: 1.45;
   text-overflow: ellipsis;

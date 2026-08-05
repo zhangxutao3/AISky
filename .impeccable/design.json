@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-05T03:35:00Z",
+  "title": "Design System: AISky",
+  "extensions": {
+    "colorMeta": {
+      "sky-teal": {
+        "role": "primary",
+        "displayName": "Sky Teal",
+        "canonical": "#159AAA",
+        "tonalRamp": ["#06383E", "#0B5963", "#107A87", "#159AAA", "#35B5C1", "#70CED5", "#B5E7E9", "#EFFBFB"]
+      },
+      "bright-cyan": {
+        "role": "primary",
+        "displayName": "Bright Cyan",
+        "canonical": "#35C5CE",
+        "tonalRamp": ["#07383B", "#0D5D62", "#16858B", "#22AAB3", "#35C5CE", "#73D9DE", "#B7ECEE", "#F0FBFC"]
+      },
+      "fresh-mint": {
+        "role": "secondary",
+        "displayName": "Fresh Mint",
+        "canonical": "#4DCEB5",
+        "tonalRamp": ["#0B3B32", "#126151", "#208974", "#32AD94", "#4DCEB5", "#82DDCB", "#BDEDE3", "#F1FCF9"]
+      },
+      "cloud-white": {
+        "role": "neutral",
+        "displayName": "Cloud White",
+        "canonical": "#F8FCFD",
+        "tonalRamp": ["#1B3035", "#365057", "#587078", "#7F969C", "#AFC0C4", "#D5E1E4", "#ECF4F6", "#F8FCFD"]
+      },
+      "slate": {
+        "role": "neutral",
+        "displayName": "Weather Slate",
+        "canonical": "#17313A",
+        "tonalRamp": ["#0A171B", "#17313A", "#2B4C56", "#496A73", "#718D95", "#A7BABF", "#D5E1E4", "#F4F8F9"]
+      }
+    },
+    "typographyMeta": {
+      "title": { "displayName": "Compact Title", "purpose": "Lead times and principal readings." },
+      "body": { "displayName": "Native Body", "purpose": "Controls, descriptions, and values." },
+      "label": { "displayName": "Forecast Label", "purpose": "Layer codes, timestamps, and status." }
+    },
+    "shadows": [
+      {
+        "name": "ambient-drawer",
+        "value": "0 18px 44px rgba(27, 76, 87, 0.16), 0 2px 8px rgba(27, 76, 87, 0.10)",
+        "purpose": "Only for the HTML point forecast drawer."
+      }
+    ],
+    "motion": [
+      {
+        "name": "drawer-enter",
+        "value": "240ms cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Left-to-right point panel entrance."
+      },
+      {
+        "name": "wind-frame",
+        "value": "32ms",
+        "purpose": "Functional wind streamline sampling at about 30fps."
+      }
+    ],
+    "breakpoints": [
+      { "name": "compact", "value": "0px" },
+      { "name": "medium", "value": "980px" },
+      { "name": "wide", "value": "1420px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Floating Panel",
+      "kind": "card",
+      "refersTo": "floating-panel",
+      "description": "Cloud-white control surface above the map.",
+      "html": "<section class=\"ds-floating-panel\">Forecast controls</section>",
+      "css": ".ds-floating-panel{background:rgba(242,248,250,.94);color:#17313a;padding:12px;border:1px solid rgba(120,164,172,.37);border-radius:14px}.ds-floating-panel:focus-within{border-color:#159aaa}"
+    },
+    {
+      "name": "Play Button",
+      "kind": "button",
+      "refersTo": "play-button",
+      "description": "Primary timeline playback action.",
+      "html": "<button class=\"ds-play\" aria-label=\"Play forecast\">▶</button>",
+      "css": ".ds-play{width:52px;height:52px;border:0;border-radius:50%;background:#35c5ce;color:#17313a;font-size:18px}.ds-play:hover{background:#4dceb5}.ds-play:focus-visible{outline:2px solid #159aaa;outline-offset:3px}"
+    },
+    {
+      "name": "Point Forecast Drawer",
+      "kind": "custom",
+      "description": "Left-side current value and forecast-series surface.",
+      "html": "<aside class=\"ds-point-drawer\"><strong>8.86 m/s</strong><div>Forecast series</div></aside>",
+      "css": ".ds-point-drawer{width:420px;padding:20px;color:#17313a;background:rgba(248,253,253,.92);border:1px solid rgba(109,154,163,.36);border-radius:18px;box-shadow:0 18px 44px rgba(27,76,87,.16)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Cloud-Edge Observatory",
+    "overview": "AISky is a map-first weather workspace that feels like clear air after rain: bright, calm, and approachable. Cloud-white controls float above the forecast while mint and sky-cyan communicate live state and action.",
+    "keyCharacteristics": [
+      "The map is always the visual hero.",
+      "Floating controls use translucent cloud surfaces and slate text.",
+      "Accent color is restrained to state, action, and small highlights.",
+      "Point inspection enters from the left."
+    ],
+    "rules": [
+      { "name": "Map Owns Color", "body": "UI chrome stays quiet so meteorological palettes carry the screen.", "section": "colors" },
+      { "name": "Cloud Layer", "body": "A floating surface should read as mist above the map, never as an opaque dashboard wall.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do preserve the full-bleed map and four-zone control layout.",
+      "Do adapt before panels overlap."
+    ],
+    "donts": [
+      "Don't turn the application into a dark scientific control room by default.",
+      "Don't add model comparison.",
+      "Don't redraw the full weather raster for every wind-animation frame."
+    ]
+  }
+}

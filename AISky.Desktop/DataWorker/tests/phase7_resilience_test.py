@@ -143,7 +143,7 @@ def main() -> None:
                         "--probe-days",
                         "1",
                         "--max-lead-hours",
-                        "0",
+                        "3",
                         "--max-version",
                         "1",
                         "--now",
@@ -171,7 +171,7 @@ def main() -> None:
                     "--probe-days",
                     "1",
                     "--max-lead-hours",
-                    "0",
+                    "3",
                     "--max-version",
                     "1",
                     "--now",
@@ -194,7 +194,7 @@ def main() -> None:
                 data_root
                 / "AISky-SDS"
                 / "20260605_1930"
-                / "AISky-SDS_20260605_1930+20260605_1930_V01.nc"
+                / "AISky-SDS_20260605_1930+20260605_2230_V01.nc"
             )
             retry_target.parent.mkdir(parents=True, exist_ok=True)
             retry_target.write_bytes(b"damaged" * 1024)
@@ -210,7 +210,7 @@ def main() -> None:
                     "--probe-days",
                     "1",
                     "--max-lead-hours",
-                    "0",
+                    "3",
                     "--max-version",
                     "1",
                     "--now",

@@ -94,7 +94,7 @@ def main() -> None:
                     "--password",
                     "1234",
                     "--max-lead-hours",
-                    "0",
+                    "3",
                     "--max-version",
                     "1",
                     "--probe-days",

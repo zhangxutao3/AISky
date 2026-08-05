@@ -20,6 +20,7 @@ public sealed partial class SettingsDialog : ContentDialog
         LayerOpacitySlider.Value = Math.Clamp(settings.MapLayerOpacity, 0.35, 1) * 100;
         MapGridToggle.IsOn = settings.ShowMapGrid;
         MapPlacesToggle.IsOn = settings.ShowMapPlaces;
+        WindAnimationToggle.IsOn = settings.ShowWindAnimation;
         DataAccessPasswordInput.Password = settings.DataAccessPassword;
         ApplicationVersionText.Text = $"版本 {VersionInfo.CurrentVersion}";
         SelectByTag(ForecastHoursPicker, settings.AutoSyncForecastHours.ToString());
@@ -29,7 +30,7 @@ public sealed partial class SettingsDialog : ContentDialog
     public AppSettings SelectedSettings => _initialSettings with
     {
         AutoSyncEnabled = AutoSyncToggle.IsOn,
-        AutoSyncForecastHours = ReadSelectedInteger(ForecastHoursPicker, 24),
+        AutoSyncForecastHours = ReadSelectedInteger(ForecastHoursPicker, 360),
         CacheRetentionDays = ReadRetentionDays(),
         KeepRunningInTray = KeepInTrayToggle.IsOn,
         StartWithWindows = StartWithWindowsToggle.IsOn,
@@ -37,6 +38,7 @@ public sealed partial class SettingsDialog : ContentDialog
         MapLayerOpacity = Math.Clamp(LayerOpacitySlider.Value / 100, 0.35, 1),
         ShowMapGrid = MapGridToggle.IsOn,
         ShowMapPlaces = MapPlacesToggle.IsOn,
+        ShowWindAnimation = WindAnimationToggle.IsOn,
         DataAccessPassword = DataAccessPasswordInput.Password,
     };
 

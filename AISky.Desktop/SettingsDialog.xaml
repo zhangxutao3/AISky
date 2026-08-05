@@ -74,6 +74,12 @@
                     Header="城市标注"
                     OffContent="隐藏"
                     OnContent="显示" />
+                <ToggleSwitch
+                    x:Name="WindAnimationToggle"
+                    AutomationProperties.Name="显示风场粒子动画"
+                    Header="风场粒子"
+                    OffContent="关闭"
+                    OnContent="显示" />
                 <TextBlock
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     Style="{StaticResource CaptionTextBlockStyle}"
@@ -98,7 +104,7 @@
                     x:Name="ForecastHoursPicker"
                     AutomationProperties.Name="自动同步预报范围"
                     Header="每次同步的预报范围"
-                    SelectedIndex="1">
+                    SelectedIndex="5">
                     <ComboBoxItem Content="仅最新时刻（+0h）" Tag="0" />
                     <ComboBoxItem Content="未来 24 小时" Tag="24" />
                     <ComboBoxItem Content="未来 48 小时" Tag="48" />
