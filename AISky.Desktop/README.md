@@ -77,11 +77,11 @@ POST 下载方式限制，网络中断后的字节级断点续传不能保证；
 “关闭主窗口后继续运行”默认开启。若要彻底退出，请使用托盘右键菜单中的
 “退出 AISky”，或先在设置中关闭该选项。
 
-当前程序版本为 `0.7.0`，更新源为
+当前程序版本为 `0.8.0`，更新源为
 [`zhangxutao3/AISky`](https://github.com/zhangxutao3/AISky)。
 点击“检查软件更新”会读取该仓库的最新 GitHub Release，并匹配
 `AISky-Desktop-win-x64.zip` 更新包。发布新版本请参考
 [`docs/RELEASING.md`](docs/RELEASING.md)。
 
 普通用户请阅读 [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md)，测试结果见
-[`docs/TEST_REPORT-v0.7.0.md`](docs/TEST_REPORT-v0.7.0.md)。
+[`docs/TEST_REPORT-v0.8.0.md`](docs/TEST_REPORT-v0.8.0.md)。

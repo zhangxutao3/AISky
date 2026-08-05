@@ -8,6 +8,7 @@ param(
     [string]$ReleaseTitle = '',
     [string]$NotesFile = '',
     [string]$OutputDirectory = '',
+    [string]$PythonArchivePath = '',
     [switch]$Upload
 )
 
@@ -92,7 +93,14 @@ Write-Host "正在准备内置 Python $pythonVersion 数据运行时..."
 $pythonArchive = Join-Path $OutputDirectory $pythonArchiveName
 $pythonRuntimeDirectory = Join-Path $stageDirectory 'Python'
 $pythonSitePackages = Join-Path $pythonRuntimeDirectory 'Lib\site-packages'
-Invoke-WebRequest -Uri $pythonDownloadUrl -OutFile $pythonArchive
+if ([string]::IsNullOrWhiteSpace($PythonArchivePath)) {
+    Invoke-WebRequest -Uri $pythonDownloadUrl -OutFile $pythonArchive
+}
+else {
+    $PythonArchivePath = (Resolve-Path -LiteralPath $PythonArchivePath).Path
+    Write-Host "正在复用本地 Python 运行时：$PythonArchivePath"
+    Copy-Item -LiteralPath $PythonArchivePath -Destination $pythonArchive
+}
 Expand-Archive -LiteralPath $pythonArchive -DestinationPath $pythonRuntimeDirectory
 New-Item -ItemType Directory -Path $pythonSitePackages -Force | Out-Null
 

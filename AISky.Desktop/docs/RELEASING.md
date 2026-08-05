@@ -35,6 +35,15 @@ gh auth login
 
 同目录还会生成 `.sha256` 校验文件。脚本拒绝覆盖已经存在的版本目录，避免误删旧包。
 
+网络不稳定时，可以复用之前成功发布时保存的同版本 Python 嵌入包：
+
+```powershell
+.\scripts\Publish-AISky.ps1 `
+  -Version 0.8.0 `
+  -Repository my-name/aisky-desktop `
+  -PythonArchivePath ..\artifacts\v0.7.0\python-3.11.9-embed-amd64.zip
+```
+
 ## 打包并发布到 GitHub Release
 
 先复制 `release-notes.example.md`，填写本次更新内容，然后运行：
