@@ -23,7 +23,10 @@
 ## 发布包
 
 - 文件：`AISky-Desktop-win-x64.zip`
+- 大小：174,434,423 字节
+- SHA-256：`2ac25a7c63abd950dac0c76cb709f0e3075a7375050668fbd9d5a8045acf3cbc`
 - 版本：`0.8.3`
-- 最终大小与 SHA-256 以 GitHub Release 附带的 `.sha256` 文件为准。
+- 产品版本：`0.8.3+67c6e114acb8471ebfa7c3645734e038e05e32f1`
 - 发布包从全新目录解压并使用空数据目录启动成功，窗口标题为 `AISky`，进程响应正常。
 - 首次启动状态保持 `firstRunSetupCompleted: false`，正确显示初始化封面。
+- GitHub Release 在线资产大小与摘要和本地最终包一致，Release 为正式版并已标记为最新版本。
