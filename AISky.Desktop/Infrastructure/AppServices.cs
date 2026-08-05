@@ -54,6 +54,9 @@ public sealed class AppServices
     {
         Paths.EnsureDirectories();
         CurrentSettings = await Settings.LoadAsync();
+        await Log.WriteAsync(
+            "INFO",
+            $"Settings loaded: autoSync={CurrentSettings.AutoSyncEnabled}, forecastHours={CurrentSettings.AutoSyncForecastHours}, firstRunComplete={CurrentSettings.FirstRunSetupCompleted}, utcOffset={CurrentSettings.DisplayUtcOffsetHours}.");
         if (CurrentSettings.StartWithWindows != Startup.IsEnabled())
         {
             CurrentSettings = CurrentSettings with

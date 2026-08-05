@@ -19,7 +19,13 @@ public sealed record BackgroundSyncStatus(
     bool AutoSyncEnabled,
     DateTimeOffset? NextRunUtc,
     DateTimeOffset UpdatedUtc,
-    bool IsError = false);
+    bool IsError = false,
+    double? ProgressPercent = null,
+    string? ActiveModel = null,
+    int? CurrentItem = null,
+    int? TotalItems = null,
+    string? OperationLabel = null,
+    bool CanCancel = false);
 
 public sealed record FirstForecastPreparationResult(
     ForecastIndex Index,
@@ -40,8 +46,11 @@ public sealed class BackgroundSyncService(
     private readonly SemaphoreSlim _operationLock = new(1, 1);
     private readonly CancellationTokenSource _shutdown = new();
     private readonly object _timerLock = new();
+    private readonly object _activeCancellationLock = new();
     private AppSettings _settings = new();
     private Timer? _timer;
+    private CancellationTokenSource? _activeBackfillCancellation;
+    private bool _syncImmediatelyAfterCurrentOperation;
     private bool _disposed;
 
     public event EventHandler<BackgroundSyncStatus>? StatusChanged;
@@ -57,12 +66,30 @@ public sealed class BackgroundSyncService(
     public void ApplySettings(AppSettings settings)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        var startImmediately = settings.AutoSyncEnabled && !_settings.AutoSyncEnabled;
+        var operationRunning = _operationLock.CurrentCount == 0;
         _settings = settings;
         lock (_timerLock)
         {
             _timer?.Dispose();
             _timer = null;
-            if (settings.AutoSyncEnabled)
+            if (operationRunning)
+            {
+                _syncImmediatelyAfterCurrentOperation =
+                    settings.AutoSyncEnabled
+                    && (_syncImmediatelyAfterCurrentOperation || startImmediately);
+                Publish(
+                    CurrentStatus.State,
+                    CurrentStatus.Message,
+                    isError: CurrentStatus.IsError,
+                    progressPercent: CurrentStatus.ProgressPercent,
+                    activeModel: CurrentStatus.ActiveModel,
+                    currentItem: CurrentStatus.CurrentItem,
+                    totalItems: CurrentStatus.TotalItems,
+                    operationLabel: CurrentStatus.OperationLabel,
+                    canCancel: CurrentStatus.CanCancel);
+            }
+            else if (settings.AutoSyncEnabled)
             {
                 var interval = TimeSpan.FromHours(Math.Clamp(settings.AutoSyncIntervalHours, 1, 24));
                 _timer = new Timer(
@@ -72,7 +99,7 @@ public sealed class BackgroundSyncService(
                     Timeout.InfiniteTimeSpan);
                 Publish(
                     BackgroundSyncState.Scheduled,
-                    $"自动同步已开启，下次检查约在 {DateTimeOffset.UtcNow.Add(interval):MM-dd HH:mm} UTC",
+                    "自动同步已开启",
                     DateTimeOffset.UtcNow.Add(interval));
             }
             else
@@ -80,17 +107,19 @@ public sealed class BackgroundSyncService(
                 Publish(BackgroundSyncState.Paused, "自动同步已暂停");
             }
         }
+        if (startImmediately && !operationRunning)
+        {
+            _ = SyncNowAsync(skipRecentCompleteModels: true);
+        }
     }
 
-    public async Task<ForecastIndex?> SyncNowAsync(CancellationToken cancellationToken = default)
+    public async Task<ForecastIndex?> SyncNowAsync(
+        CancellationToken cancellationToken = default,
+        bool skipRecentCompleteModels = false)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (!await _operationLock.WaitAsync(0, cancellationToken))
         {
-            Publish(
-                BackgroundSyncState.Syncing,
-                "同步任务已经在运行，请稍候",
-                CurrentStatus.NextRunUtc);
             return null;
         }
 
@@ -99,19 +128,58 @@ public sealed class BackgroundSyncService(
             _shutdown.Token);
         try
         {
-            Publish(BackgroundSyncState.Syncing, "正在寻找两个模型的最新起报数据");
+            Publish(
+                BackgroundSyncState.Syncing,
+                "正在检查 Energy 与 SDS 的最新起报",
+                progressPercent: 0,
+                operationLabel: "双模型同步");
             var index = await dataWorker.GetIndexAsync(linkedCancellation.Token);
             var foundModels = 0;
             var downloaded = 0;
             var skipped = 0;
             var failures = 0;
+            var forecastHours = Math.Clamp(_settings.AutoSyncForecastHours, 3, 360);
+            var expectedRuns = forecastHours / 3;
+            var nowUtc = DateTimeOffset.UtcNow;
             Exception? firstFailure = null;
-            foreach (var model in Models)
+            for (var modelIndex = 0; modelIndex < Models.Length; modelIndex++)
             {
-                var progress = new Progress<DataWorkerProgress>(item =>
+                var model = Models[modelIndex];
+                if (skipRecentCompleteModels
+                    && HasRecentCompleteRun(index, model, forecastHours, nowUtc))
+                {
+                    foundModels++;
+                    skipped += expectedRuns;
                     Publish(
                         BackgroundSyncState.Syncing,
-                        item.IsWarning ? $"同步提醒：{item.Message}" : item.Message));
+                        $"{model} · 最近完整预报已在本地，跳过重复同步",
+                        progressPercent: (modelIndex + 1d) / Models.Length * 100,
+                        activeModel: model,
+                        currentItem: expectedRuns,
+                        totalItems: expectedRuns,
+                        operationLabel: "双模型同步");
+                    continue;
+                }
+
+                var progress = new DirectProgress<DataWorkerProgress>(item =>
+                {
+                    var modelFraction = item.CurrentItem is { } current
+                        && item.TotalItems is > 0
+                            ? Math.Clamp(current / (double)item.TotalItems.Value, 0, 1)
+                            : item.Percent is { } percent
+                                ? Math.Clamp(percent / 100, 0, 1)
+                                : 0;
+                    Publish(
+                        BackgroundSyncState.Syncing,
+                        item.IsWarning
+                            ? $"{model} · 同步提醒：{item.Message}"
+                            : $"{model} · {item.Message}",
+                        progressPercent: (modelIndex + modelFraction) / Models.Length * 100,
+                        activeModel: model,
+                        currentItem: item.CurrentItem,
+                        totalItems: item.TotalItems,
+                        operationLabel: "双模型同步");
+                });
                 try
                 {
                     var result = await dataWorker.SyncLatestAsync(
@@ -119,7 +187,7 @@ public sealed class BackgroundSyncService(
                             model,
                             _settings.DataAccessPassword,
                             Math.Clamp(_settings.LatestProbeDays, 1, 14),
-                            Math.Clamp(_settings.AutoSyncForecastHours, 0, 360)),
+                            forecastHours),
                         progress,
                         linkedCancellation.Token);
                     index = result.Index;
@@ -127,6 +195,16 @@ public sealed class BackgroundSyncService(
                     downloaded += result.Downloaded;
                     skipped += result.Skipped;
                     failures += result.Failed;
+                    Publish(
+                        BackgroundSyncState.Syncing,
+                        result.Found
+                            ? $"{model} · 最新起报检查完成"
+                            : $"{model} · 暂未发现可用新起报",
+                        progressPercent: (modelIndex + 1d) / Models.Length * 100,
+                        activeModel: model,
+                        currentItem: expectedRuns,
+                        totalItems: expectedRuns,
+                        operationLabel: "双模型同步");
                 }
                 catch (Exception exception) when (exception is not OperationCanceledException)
                 {
@@ -136,7 +214,11 @@ public sealed class BackgroundSyncService(
                 }
             }
 
-            Publish(BackgroundSyncState.Cleaning, "同步完成，正在执行缓存保留策略");
+            Publish(
+                BackgroundSyncState.Cleaning,
+                "双模型检查完成，正在清理过期缓存",
+                progressPercent: 100,
+                operationLabel: "双模型同步");
             var cleanup = await dataWorker.CleanupAsync(
                 new CleanupRequest(Math.Clamp(_settings.CacheRetentionDays, 1, 365)),
                 null,
@@ -203,7 +285,6 @@ public sealed class BackgroundSyncService(
         }
         if (!await _operationLock.WaitAsync(0, cancellationToken))
         {
-            Publish(BackgroundSyncState.Syncing, "已有数据任务正在运行，请稍候");
             return null;
         }
 
@@ -216,7 +297,7 @@ public sealed class BackgroundSyncService(
             Publish(
                 BackgroundSyncState.Syncing,
                 $"正在补齐 {model} 当前起报的 0–{hours} 小时序列");
-            var progress = new Progress<DataWorkerProgress>(item =>
+            var progress = new DirectProgress<DataWorkerProgress>(item =>
                 Publish(
                     BackgroundSyncState.Syncing,
                     item.IsWarning ? $"补齐提醒：{item.Message}" : item.Message));
@@ -261,6 +342,149 @@ public sealed class BackgroundSyncService(
         }
     }
 
+    public async Task<bool> StartBackfillAsync(
+        DownloadRangeRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (!Models.Contains(request.Model, StringComparer.Ordinal))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(request),
+                request.Model,
+                "不支持的预报模型。");
+        }
+        if (!await _operationLock.WaitAsync(0, cancellationToken))
+        {
+            return false;
+        }
+
+        var operationCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            _shutdown.Token);
+        lock (_activeCancellationLock)
+        {
+            _activeBackfillCancellation = operationCancellation;
+        }
+        _ = RunBackfillAsync(request, operationCancellation);
+        return true;
+    }
+
+    public bool CancelActiveOperation()
+    {
+        lock (_activeCancellationLock)
+        {
+            if (_activeBackfillCancellation is null
+                || _activeBackfillCancellation.IsCancellationRequested)
+            {
+                return false;
+            }
+            _activeBackfillCancellation.Cancel();
+            return true;
+        }
+    }
+
+    private async Task RunBackfillAsync(
+        DownloadRangeRequest request,
+        CancellationTokenSource operationCancellation)
+    {
+        var initCount = Math.Max(
+            1,
+            (int)Math.Floor((request.EndUtc - request.StartUtc).TotalHours / 3) + 1);
+        var runBasePercent = 0d;
+        try
+        {
+            Publish(
+                BackgroundSyncState.Syncing,
+                $"{request.Model} · 正在准备回溯下载",
+                progressPercent: 0,
+                activeModel: request.Model,
+                operationLabel: "回溯下载",
+                canCancel: true);
+            var progress = new DirectProgress<DataWorkerProgress>(item =>
+            {
+                if (item.Stage == "run" && item.Percent is { } runPercent)
+                {
+                    runBasePercent = Math.Clamp(runPercent, 0, 100);
+                }
+                var overallPercent = item.Stage == "file"
+                    && item.CurrentItem is { } current
+                    && item.TotalItems is > 0
+                        ? Math.Clamp(
+                            runBasePercent
+                            + current / (double)item.TotalItems.Value * 100 / initCount,
+                            0,
+                            100)
+                        : item.Percent is { } percent
+                            ? Math.Clamp(percent, 0, 100)
+                            : runBasePercent;
+                Publish(
+                    BackgroundSyncState.Syncing,
+                    item.IsWarning
+                        ? $"{request.Model} · 下载提醒：{item.Message}"
+                        : $"{request.Model} · {item.Message}",
+                    progressPercent: overallPercent,
+                    activeModel: request.Model,
+                    currentItem: item.CurrentItem,
+                    totalItems: item.TotalItems,
+                    operationLabel: "回溯下载",
+                    canCancel: true);
+            });
+            var result = await dataWorker.DownloadRangeAsync(
+                request,
+                progress,
+                operationCancellation.Token);
+            IndexUpdated?.Invoke(this, result.Index);
+            var message =
+                $"回溯下载完成：新增 {result.Downloaded} 个，跳过 {result.Skipped} 个";
+            if (result.Failed > 0)
+            {
+                message += $"，失败 {result.Failed} 个";
+            }
+            await log.WriteAsync(
+                result.Failed > 0 ? "WARN" : "INFO",
+                $"Backfill finished. model={request.Model}, start={request.StartUtc:O}, end={request.EndUtc:O}, downloaded={result.Downloaded}, skipped={result.Skipped}, failed={result.Failed}.");
+            ScheduleAfterCompletion(message, result.Failed > 0);
+        }
+        catch (OperationCanceledException)
+        {
+            try
+            {
+                var index = await dataWorker.GetIndexAsync(_shutdown.Token);
+                IndexUpdated?.Invoke(this, index);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                await log.WriteAsync(
+                    "WARN",
+                    $"Refreshing index after backfill cancellation failed: {exception}");
+            }
+            await log.WriteAsync("INFO", "Backfill download cancelled by the user.");
+            ScheduleAfterCompletion(
+                "回溯下载已取消；已完成文件保留，未完成文件不会进入索引",
+                isError: false);
+        }
+        catch (Exception exception)
+        {
+            await log.WriteAsync("ERROR", $"Backfill download failed: {exception}");
+            ScheduleAfterCompletion(
+                $"回溯下载失败：{FriendlyError(exception)}",
+                isError: true);
+        }
+        finally
+        {
+            lock (_activeCancellationLock)
+            {
+                if (ReferenceEquals(_activeBackfillCancellation, operationCancellation))
+                {
+                    _activeBackfillCancellation = null;
+                }
+            }
+            operationCancellation.Dispose();
+            _operationLock.Release();
+        }
+    }
+
     public async Task<FirstForecastPreparationResult> PrepareFirstForecastAsync(
         string model,
         string password,
@@ -287,7 +511,7 @@ public sealed class BackgroundSyncService(
             Publish(
                 BackgroundSyncState.Syncing,
                 $"正在寻找 {model} 最新起报并下载完整 15 天预报");
-            var progress = new Progress<DataWorkerProgress>(item =>
+            var progress = new DirectProgress<DataWorkerProgress>(item =>
             {
                 Publish(
                     BackgroundSyncState.Syncing,
@@ -400,12 +624,22 @@ public sealed class BackgroundSyncService(
             if (_settings.AutoSyncEnabled && !_shutdown.IsCancellationRequested)
             {
                 var interval = TimeSpan.FromHours(Math.Clamp(_settings.AutoSyncIntervalHours, 1, 24));
-                nextRun = DateTimeOffset.UtcNow.Add(interval);
+                var startImmediately = _syncImmediatelyAfterCurrentOperation;
+                _syncImmediatelyAfterCurrentOperation = false;
+                var dueTime = startImmediately
+                    ? TimeSpan.FromMilliseconds(250)
+                    : interval;
+                nextRun = DateTimeOffset.UtcNow.Add(dueTime);
                 _timer = new Timer(
-                    _ => _ = SyncNowAsync(),
+                    _ => _ = SyncNowAsync(
+                        skipRecentCompleteModels: startImmediately),
                     null,
-                    interval,
+                    dueTime,
                     Timeout.InfiniteTimeSpan);
+            }
+            else
+            {
+                _syncImmediatelyAfterCurrentOperation = false;
             }
         }
         Publish(
@@ -420,7 +654,13 @@ public sealed class BackgroundSyncService(
         BackgroundSyncState state,
         string message,
         DateTimeOffset? nextRunUtc = null,
-        bool isError = false)
+        bool isError = false,
+        double? progressPercent = null,
+        string? activeModel = null,
+        int? currentItem = null,
+        int? totalItems = null,
+        string? operationLabel = null,
+        bool canCancel = false)
     {
         CurrentStatus = new BackgroundSyncStatus(
             state,
@@ -428,8 +668,39 @@ public sealed class BackgroundSyncService(
             _settings.AutoSyncEnabled,
             nextRunUtc,
             DateTimeOffset.UtcNow,
-            isError);
+            isError,
+            progressPercent,
+            activeModel,
+            currentItem,
+            totalItems,
+            operationLabel,
+            canCancel);
         StatusChanged?.Invoke(this, CurrentStatus);
+    }
+
+    private bool HasRecentCompleteRun(
+        ForecastIndex index,
+        string model,
+        int forecastHours,
+        DateTimeOffset nowUtc)
+    {
+        var cutoff = nowUtc.AddDays(-Math.Clamp(_settings.LatestProbeDays, 1, 14));
+        var requiredLeads = Enumerable.Range(1, forecastHours / 3)
+            .Select(item => item * 3)
+            .ToHashSet();
+        return index.Runs
+            .Where(item => item.Model == model)
+            .GroupBy(item => item.InitKey)
+            .OrderByDescending(group => group.Key)
+            .Any(group =>
+                DateTimeOffset.TryParseExact(
+                    group.Key,
+                    "yyyyMMdd_HHmm",
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                    out var initUtc)
+                && initUtc >= cutoff
+                && requiredLeads.IsSubsetOf(group.Select(item => item.LeadHours)));
     }
 
     private static string FriendlyError(Exception exception)
@@ -467,13 +738,20 @@ public sealed class BackgroundSyncService(
             return;
         }
         _disposed = true;
+        CancelActiveOperation();
         _shutdown.Cancel();
         lock (_timerLock)
         {
             _timer?.Dispose();
             _timer = null;
         }
-        _shutdown.Dispose();
-        _operationLock.Dispose();
+        // Active workers observe the cancellation asynchronously and release the
+        // semaphore in their finally blocks. The process is exiting, so leaving
+        // these tiny primitives undisposed avoids racing that cleanup path.
+    }
+
+    private sealed class DirectProgress<T>(Action<T> handler) : IProgress<T>
+    {
+        public void Report(T value) => handler(value);
     }
 }

@@ -25,11 +25,12 @@ public sealed partial class MainPage : Page
     private ForecastRun? _selectedRun;
     private bool _mapReady;
     private bool _suppressSelection;
-    private bool _suppressAutoSync;
-    private bool _suppressDisplaySettings;
+    private bool _suppressAutoSync = true;
+    private bool _suppressDisplaySettings = true;
     private bool _backgroundEventsAttached;
     private bool _isPlaying;
     private bool _firstRunBusy;
+    private bool _modelSelectionMadeByUser;
     private int _firstRunCurrentItem;
     private int _currentForecastIndex;
     private int _lastTimelineSelectionIndex = -1;
@@ -234,16 +235,33 @@ public sealed partial class MainPage : Page
         var dialog = new BackfillDialog(App.Services.CurrentSettings.DataAccessPassword)
         {
             XamlRoot = XamlRoot,
-            IndexUpdated = async index =>
-            {
-                _index = index;
-                ApplyIndex(index);
-                ServiceStatusText.Text = $"下载完成，索引现有 {index.Runs.Count} 个预报时刻";
-                HideFirstRunOverlayIfReady(index);
-                await App.Services.Log.WriteAsync("INFO", "Backfill download completed and index refreshed.");
-            },
         };
-        await dialog.ShowAsync();
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary
+            || dialog.Request is null)
+        {
+            return;
+        }
+
+        var started = await App.Services.BackgroundSync.StartBackfillAsync(dialog.Request);
+        if (!started)
+        {
+            ServiceStatusTitle.Text = "后台任务";
+            ServiceStatusText.Text = "已有数据任务正在运行，请稍后重新提交回溯下载";
+            return;
+        }
+        await App.Services.Log.WriteAsync(
+            "INFO",
+            $"Backfill queued in background. model={dialog.Request.Model}, start={dialog.Request.StartUtc:O}, end={dialog.Request.EndUtc:O}.");
+    }
+
+    private void CancelBackgroundTask_Click(object sender, RoutedEventArgs e)
+    {
+        if (App.Services.BackgroundSync.CancelActiveOperation())
+        {
+            CancelBackgroundTaskButton.IsEnabled = false;
+            CancelBackgroundTaskCommand.IsEnabled = false;
+            ServiceStatusText.Text = "正在取消回溯下载";
+        }
     }
 
     private async void ImportButton_Click(object sender, RoutedEventArgs e) =>
@@ -646,8 +664,7 @@ public sealed partial class MainPage : Page
             XamlRoot = XamlRoot,
         };
         await dialog.ShowAsync();
-        ServiceStatusTitle.Text = "本地数据服务";
-        ServiceStatusText.Text = App.Services.BackgroundSync.CurrentStatus.Message;
+        ApplyBackgroundStatus(App.Services.BackgroundSync.CurrentStatus);
     }
 
     private void CompactRunButton_Click(object sender, RoutedEventArgs e)
@@ -730,7 +747,7 @@ public sealed partial class MainPage : Page
             SelectRun(selectedRun, updateForecastPicker: true);
         }
         SendDisplayOptionsToMap();
-        ServiceStatusText.Text = $"显示时间已切换为 {DisplayTimeZoneLabel}";
+        ApplyBackgroundStatus(App.Services.BackgroundSync.CurrentStatus);
     }
 
     private async void FillSeriesButton_Click(object sender, RoutedEventArgs e)
@@ -810,21 +827,43 @@ public sealed partial class MainPage : Page
         SyncNowButton.IsEnabled =
             status.State is not BackgroundSyncState.Syncing
                 and not BackgroundSyncState.Cleaning;
-        ServiceStatusTitle.Text = status.State switch
-        {
-            BackgroundSyncState.Syncing => "正在同步",
-            BackgroundSyncState.Cleaning => "缓存维护",
-            BackgroundSyncState.Error => "需要处理",
-            BackgroundSyncState.Scheduled => "后台同步",
-            _ => "本地数据服务",
-        };
+        ServiceStatusTitle.Text = status.OperationLabel
+            ?? (status.State switch
+            {
+                BackgroundSyncState.Syncing => "正在同步",
+                BackgroundSyncState.Cleaning => "缓存维护",
+                BackgroundSyncState.Error => "需要处理",
+                BackgroundSyncState.Scheduled => "后台同步",
+                _ => "本地数据服务",
+            });
         SetStatusDot(status.State switch
         {
             BackgroundSyncState.Syncing or BackgroundSyncState.Cleaning => "AISkyWarningBrush",
             BackgroundSyncState.Error => "AISkyErrorBrush",
             _ => "AISkySuccessBrush",
         });
-        ServiceStatusText.Text = status.Message;
+        ServiceStatusText.Text = FormatBackgroundStatusMessage(status);
+        var isBusy = status.State is BackgroundSyncState.Syncing
+            or BackgroundSyncState.Cleaning;
+        BackgroundSyncProgressBar.Visibility = isBusy
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        if (isBusy)
+        {
+            BackgroundSyncProgressBar.IsIndeterminate = status.ProgressPercent is null;
+            if (status.ProgressPercent is { } progress)
+            {
+                BackgroundSyncProgressBar.Value = Math.Clamp(progress, 0, 100);
+            }
+        }
+        CancelBackgroundTaskButton.Visibility = status.CanCancel
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        CancelBackgroundTaskCommand.Visibility = status.CanCancel
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        CancelBackgroundTaskButton.IsEnabled = status.CanCancel;
+        CancelBackgroundTaskCommand.IsEnabled = status.CanCancel;
     }
 
     private void SetStatusDot(string resourceKey)
@@ -841,6 +880,7 @@ public sealed partial class MainPage : Page
         {
             return;
         }
+        _modelSelectionMadeByUser = true;
         PopulateInitPicker(GetSelectedModel());
     }
 
@@ -997,7 +1037,9 @@ public sealed partial class MainPage : Page
         _index = index;
         preferredModel ??= GetSelectedModel();
         var availableModels = index.Runs.Select(run => run.Model).Distinct().ToHashSet();
-        if (!availableModels.Contains(preferredModel) && availableModels.Count > 0)
+        if (!_modelSelectionMadeByUser
+            && !availableModels.Contains(preferredModel)
+            && availableModels.Count > 0)
         {
             preferredModel = index.Runs[0].Model;
         }
@@ -1247,7 +1289,7 @@ public sealed partial class MainPage : Page
     {
         if (_selectedRun is null)
         {
-            ProductStatusText.Text = "等待预报产品";
+            ProductStatusText.Text = $"{GetSelectedModel()} · 暂无数据";
             LayerContextText.Text = "暂无可用时次";
             ToolTipService.SetToolTip(UpdateStatus, null);
             return;
@@ -1482,6 +1524,21 @@ public sealed partial class MainPage : Page
         _displayUtcOffsetHours == 0
             ? "UTC"
             : $"UTC{_displayUtcOffsetHours:+#;-#}";
+
+    private string FormatBackgroundStatusMessage(BackgroundSyncStatus status)
+    {
+        if (status.State != BackgroundSyncState.Scheduled
+            || status.NextRunUtc is not { } nextRunUtc)
+        {
+            return status.Message;
+        }
+
+        var nextRun = nextRunUtc
+            .ToUniversalTime()
+            .ToOffset(TimeSpan.FromHours(_displayUtcOffsetHours))
+            .ToString("MM-dd HH:mm", CultureInfo.InvariantCulture);
+        return $"{status.Message} · 下次检查 {nextRun} {DisplayTimeZoneLabel}";
+    }
 
     private static string FormatLead(int leadHours) =>
         leadHours >= 0 ? $"+{leadHours}h" : $"{leadHours}h";

@@ -10,6 +10,7 @@ public sealed class JsonSettingsStore(AppPaths paths)
     {
         WriteIndented = true,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true,
     };
 
     public async Task<AppSettings> LoadAsync()

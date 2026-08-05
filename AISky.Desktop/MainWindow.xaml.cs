@@ -125,7 +125,7 @@ public sealed partial class MainWindow : Window
             settings.AutoSyncEnabled ? "自动同步已暂停" : "自动同步已开启",
             settings.AutoSyncEnabled
                 ? "现有数据保持不变，可随时从托盘重新开启。"
-                : $"AISky 将每 {settings.AutoSyncIntervalHours} 小时检查最新起报。",
+                : $"AISky 正在立即检查双模型，之后每 {settings.AutoSyncIntervalHours} 小时自动同步。",
             TrayIconState.Normal);
     }
 

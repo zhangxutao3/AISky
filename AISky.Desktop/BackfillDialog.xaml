@@ -7,14 +7,14 @@
     CloseButtonText="取消"
     DefaultButton="Primary"
     PrimaryButtonClick="ContentDialog_PrimaryButtonClick"
-    PrimaryButtonText="开始下载">
+    PrimaryButtonText="开始后台下载">
 
     <StackPanel Width="440" Spacing="14">
         <InfoBar
             IsClosable="False"
             IsIconVisible="True"
             IsOpen="True"
-            Message="每个起报会按 3 小时间隔下载可用预报文件。长时间范围可能占用较多磁盘空间。"
+            Message="提交后将转入后台下载，可继续使用地图；进度与取消操作会显示在主界面状态区。"
             Severity="Informational" />
 
         <ComboBox
@@ -69,29 +69,6 @@
             MaxLength="128"
             PasswordRevealMode="Peek"
             PlaceholderText="公开数据可留空" />
-
-        <StackPanel x:Name="ProgressArea" Spacing="8" Visibility="Collapsed">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <TextBlock
-                    x:Name="ProgressText"
-                    Text="正在准备下载任务"
-                    TextTrimming="CharacterEllipsis" />
-                <TextBlock
-                    x:Name="ProgressValueText"
-                    Grid.Column="1"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    Text="0%" />
-            </Grid>
-            <ProgressBar
-                x:Name="DownloadProgress"
-                AutomationProperties.Name="回溯下载进度"
-                Maximum="100"
-                Minimum="0" />
-        </StackPanel>
 
         <InfoBar
             x:Name="ResultInfoBar"

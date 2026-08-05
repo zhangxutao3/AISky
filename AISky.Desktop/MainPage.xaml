@@ -260,6 +260,16 @@
                             </AppBarButton.Icon>
                         </AppBarButton>
                         <AppBarButton
+                            x:Name="CancelBackgroundTaskCommand"
+                            AutomationProperties.Name="取消回溯下载"
+                            Click="CancelBackgroundTask_Click"
+                            Label="取消回溯下载"
+                            Visibility="Collapsed">
+                            <AppBarButton.Icon>
+                                <FontIcon Glyph="&#xE711;" />
+                            </AppBarButton.Icon>
+                        </AppBarButton>
+                        <AppBarButton
                             AutomationProperties.Name="检查软件更新"
                             Click="CheckUpdateButton_Click"
                             Label="检查软件更新">
@@ -363,6 +373,7 @@
                             Grid.Row="1"
                             MinWidth="164"
                             AutomationProperties.Name="起报时间"
+                            PlaceholderText="暂无本地起报"
                             SelectionChanged="InitPicker_SelectionChanged"
                             Style="{StaticResource TopRunPickerComboBoxStyle}"
                             ToolTipService.ToolTip="起报时间（当前显示时区）" />
@@ -382,6 +393,7 @@
                             Grid.Row="1"
                             MinWidth="176"
                             AutomationProperties.Name="预报时效"
+                            PlaceholderText="暂无预报时次"
                             SelectionChanged="ForecastPicker_SelectionChanged"
                             Style="{StaticResource TopRunPickerComboBoxStyle}"
                             ToolTipService.ToolTip="预报时效（当前显示时区）" />
@@ -409,25 +421,60 @@
                         VerticalAlignment="Top"
                         Margin="0,5,0,0"
                         Fill="{StaticResource AISkySuccessBrush}" />
-                    <StackPanel Grid.Column="1" Spacing="-1">
+                    <Grid Grid.Column="1" RowSpacing="1">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
                         <TextBlock
                             x:Name="ProductStatusText"
                             FontSize="13"
                             FontWeight="SemiBold"
                             Text="等待预报产品"
                             TextTrimming="CharacterEllipsis" />
-                        <TextBlock
-                            x:Name="ServiceStatusTitle"
-                            Foreground="{ThemeResource AISkyTextMutedBrush}"
-                            FontSize="10"
-                            Text="本地数据服务" />
-                        <TextBlock
-                            x:Name="ServiceStatusText"
-                            Foreground="{ThemeResource AISkyTextMutedBrush}"
-                            FontSize="10"
-                            Text="正在初始化"
-                            TextTrimming="CharacterEllipsis" />
-                    </StackPanel>
+                        <Grid Grid.Row="1" ColumnSpacing="5">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock
+                                x:Name="ServiceStatusTitle"
+                                Foreground="{ThemeResource AISkyTextMutedBrush}"
+                                FontSize="10"
+                                Text="本地数据服务" />
+                            <TextBlock
+                                x:Name="ServiceStatusText"
+                                Grid.Column="1"
+                                Foreground="{ThemeResource AISkyTextMutedBrush}"
+                                FontSize="10"
+                                Text="正在初始化"
+                                TextTrimming="CharacterEllipsis" />
+                            <Button
+                                x:Name="CancelBackgroundTaskButton"
+                                Grid.Column="2"
+                                Width="20"
+                                Height="20"
+                                Padding="0"
+                                VerticalAlignment="Center"
+                                AutomationProperties.Name="取消回溯下载"
+                                Click="CancelBackgroundTask_Click"
+                                Content="&#xE711;"
+                                FontFamily="Segoe Fluent Icons"
+                                ToolTipService.ToolTip="取消回溯下载"
+                                Visibility="Collapsed" />
+                        </Grid>
+                        <ProgressBar
+                            x:Name="BackgroundSyncProgressBar"
+                            Grid.Row="2"
+                            Height="3"
+                            Margin="0,2,0,0"
+                            AutomationProperties.Name="后台数据任务进度"
+                            Maximum="100"
+                            Minimum="0"
+                            Visibility="Collapsed" />
+                    </Grid>
                 </Grid>
             </Border>
         </Grid>
