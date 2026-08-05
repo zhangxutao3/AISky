@@ -1,7 +1,8 @@
 # AISky 发布与更新指南
 
 AISky 当前采用“Windows x64 绿色免安装包”发布方式。发布包已经包含 .NET 与
-Windows App SDK 所需组件，用户解压后可直接运行 `AISky.Desktop.exe`。
+Windows App SDK 与 Python/NetCDF 数据运行时，用户解压后可直接运行
+`AISky.Desktop.exe`。
 
 ## 第一次配置更新仓库
 
@@ -22,14 +23,14 @@ gh auth login
 
 ```powershell
 .\scripts\Publish-AISky.ps1 `
-  -Version 0.6.0 `
+  -Version 0.7.0 `
   -Repository my-name/aisky-desktop
 ```
 
 输出位于：
 
 ```text
-..\artifacts\v0.6.0\AISky-Desktop-win-x64.zip
+..\artifacts\v0.7.0\AISky-Desktop-win-x64.zip
 ```
 
 同目录还会生成 `.sha256` 校验文件。脚本拒绝覆盖已经存在的版本目录，避免误删旧包。

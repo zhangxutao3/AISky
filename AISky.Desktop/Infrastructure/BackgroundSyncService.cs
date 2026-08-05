@@ -93,6 +93,7 @@ public sealed class BackgroundSyncService(
             var downloaded = 0;
             var skipped = 0;
             var failures = 0;
+            Exception? firstFailure = null;
             foreach (var model in Models)
             {
                 var progress = new Progress<DataWorkerProgress>(item =>
@@ -118,6 +119,7 @@ public sealed class BackgroundSyncService(
                 catch (Exception exception) when (exception is not OperationCanceledException)
                 {
                     failures++;
+                    firstFailure ??= exception;
                     await log.WriteAsync("ERROR", $"{model} automatic sync failed: {exception}");
                 }
             }
@@ -139,6 +141,13 @@ public sealed class BackgroundSyncService(
             if (failures > 0)
             {
                 message += $"；{failures} 项失败，稍后会重试";
+            }
+            var hasNoUsableData = index.Runs.Count == 0
+                && foundModels == 0
+                && downloaded == 0;
+            if (hasNoUsableData && firstFailure is not null)
+            {
+                message = $"同步失败：{FriendlyError(firstFailure)}";
             }
             await log.WriteAsync(
                 failures > 0 ? "WARN" : "INFO",

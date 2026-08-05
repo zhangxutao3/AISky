@@ -28,6 +28,7 @@ public sealed partial class MainPage : Page
     private bool _suppressAutoSync;
     private bool _backgroundEventsAttached;
     private bool _isPlaying;
+    private bool _firstRunBusy;
 
     public ObservableCollection<LayerItem> LayerItems { get; } = [];
 
@@ -66,6 +67,9 @@ public sealed partial class MainPage : Page
             if (!workerStatus.IsAvailable)
             {
                 ServiceStatusText.Text = workerStatus.Message;
+                MapLoadingOverlay.Visibility = Visibility.Collapsed;
+                ShowFirstRunOverlay(workerStatus.Message, InfoBarSeverity.Error);
+                FirstRunProbeButton.IsEnabled = false;
                 await App.Services.Log.WriteAsync("ERROR", workerStatus.Message);
                 return;
             }
@@ -79,12 +83,30 @@ public sealed partial class MainPage : Page
                 "INFO",
                 $"Data worker ready: Python {workerStatus.PythonVersion}, NumPy {workerStatus.NumpyVersion}; {_index.Runs.Count} run(s).");
             ApplyBackgroundStatus(App.Services.BackgroundSync.CurrentStatus);
+            if (_index.Runs.Count == 0)
+            {
+                ShowFirstRunOverlay();
+                if (!string.IsNullOrWhiteSpace(FirstRunPasswordInput.Password))
+                {
+                    await ProbeFirstRunAsync();
+                }
+            }
         }
         catch (Exception exception)
         {
             ServiceStatusText.Text = "本地数据服务初始化失败";
             MapLoadingOverlay.Visibility = Visibility.Collapsed;
-            await App.Services.Log.WriteAsync("ERROR", exception.ToString());
+            ShowFirstRunOverlay(
+                $"本地数据服务未能启动：{FriendlyDataError(exception)}",
+                InfoBarSeverity.Error);
+            try
+            {
+                await App.Services.Log.WriteAsync("ERROR", exception.ToString());
+            }
+            catch
+            {
+                WriteFallbackStartupError(exception);
+            }
         }
     }
 
@@ -155,6 +177,10 @@ public sealed partial class MainPage : Page
             ServiceStatusText.Text = _index.Runs.Count == 0
                 ? "本地索引为空，可下载或导入 NetCDF"
                 : $"索引已刷新，共 {_index.Runs.Count} 个预报时刻";
+            if (_index.Runs.Count == 0)
+            {
+                ShowFirstRunOverlay();
+            }
         }
         catch (Exception exception)
         {
@@ -173,13 +199,17 @@ public sealed partial class MainPage : Page
                 _index = index;
                 ApplyIndex(index);
                 ServiceStatusText.Text = $"下载完成，索引现有 {index.Runs.Count} 个预报时刻";
+                HideFirstRunOverlayIfReady(index);
                 await App.Services.Log.WriteAsync("INFO", "Backfill download completed and index refreshed.");
             },
         };
         await dialog.ShowAsync();
     }
 
-    private async void ImportButton_Click(object sender, RoutedEventArgs e)
+    private async void ImportButton_Click(object sender, RoutedEventArgs e) =>
+        await ImportLocalNetCdfAsync();
+
+    private async Task<bool> ImportLocalNetCdfAsync()
     {
         try
         {
@@ -200,13 +230,17 @@ public sealed partial class MainPage : Page
             var file = await picker.PickSingleFileAsync();
             if (file is null)
             {
-                return;
+                return false;
             }
 
             ServiceStatusText.Text = $"正在验证 {file.Name}";
             var progress = new Progress<DataWorkerProgress>(item =>
             {
                 ServiceStatusText.Text = item.Message;
+                if (FirstRunOverlay.Visibility == Visibility.Visible)
+                {
+                    FirstRunStatusText.Text = item.Message;
+                }
             });
             _index = await App.Services.DataWorker.ImportAsync(
                 file.Path,
@@ -214,13 +248,185 @@ public sealed partial class MainPage : Page
                 progress);
             ApplyIndex(_index);
             ServiceStatusText.Text = $"{file.Name} 已解析并加入本地索引";
+            HideFirstRunOverlayIfReady(_index);
             await App.Services.Log.WriteAsync("INFO", $"Imported NetCDF: {file.Path}");
+            return true;
         }
         catch (Exception exception)
         {
-            ServiceStatusText.Text = $"导入失败：{FriendlyDataError(exception)}";
+            var message = FriendlyDataError(exception);
+            ServiceStatusText.Text = $"导入失败：{message}";
+            if (FirstRunOverlay.Visibility == Visibility.Visible)
+            {
+                ShowFirstRunMessage(message, InfoBarSeverity.Error);
+                FirstRunStatusText.Text = "文件未通过校验";
+            }
             await App.Services.Log.WriteAsync("ERROR", exception.ToString());
+            return false;
         }
+    }
+
+    private async void FirstRunProbeButton_Click(object sender, RoutedEventArgs e) =>
+        await ProbeFirstRunAsync();
+
+    private async void FirstRunImportButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_firstRunBusy)
+        {
+            return;
+        }
+
+        SetFirstRunBusy(true, "正在等待选择本地 NetCDF");
+        try
+        {
+            await ImportLocalNetCdfAsync();
+        }
+        finally
+        {
+            SetFirstRunBusy(false);
+        }
+    }
+
+    private void FirstRunPasswordInput_PasswordChanged(object sender, RoutedEventArgs e)
+    {
+        if (!_firstRunBusy)
+        {
+            FirstRunProbeButton.IsEnabled =
+                !string.IsNullOrWhiteSpace(FirstRunPasswordInput.Password);
+        }
+    }
+
+    private async Task ProbeFirstRunAsync()
+    {
+        if (_firstRunBusy)
+        {
+            return;
+        }
+
+        var password = FirstRunPasswordInput.Password.Trim();
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            ShowFirstRunMessage("请输入数据访问密码，或导入一个已有的 NetCDF 文件。", InfoBarSeverity.Warning);
+            FirstRunPasswordInput.Focus(FocusState.Programmatic);
+            return;
+        }
+
+        SetFirstRunBusy(true, "正在从最近 3 天寻找可用起报");
+        FirstRunInfo.IsOpen = false;
+        try
+        {
+            await App.Services.UpdateSettingsAsync(
+                App.Services.CurrentSettings with { DataAccessPassword = password });
+            var result = await App.Services.BackgroundSync.SyncNowAsync();
+            if (result is not null)
+            {
+                _index = result;
+                ApplyIndex(result);
+                if (result.Runs.Count > 0)
+                {
+                    FirstRunStatusText.Text = $"已准备 {result.Runs.Count} 个预报时次";
+                    HideFirstRunOverlayIfReady(result);
+                    await App.Services.Log.WriteAsync(
+                        "INFO",
+                        $"First-run preparation completed with {result.Runs.Count} run(s).");
+                    return;
+                }
+            }
+
+            var status = App.Services.BackgroundSync.CurrentStatus;
+            FirstRunStatusText.Text = "暂未获得可用预报";
+            ShowFirstRunMessage(
+                status.IsError
+                    ? status.Message
+                    : "最近 3 天暂未发现可用起报。请检查网络与密码后重试，或导入本地 NetCDF。",
+                status.IsError ? InfoBarSeverity.Error : InfoBarSeverity.Warning);
+        }
+        catch (Exception exception)
+        {
+            var message = FriendlyDataError(exception);
+            FirstRunStatusText.Text = "准备数据时遇到问题";
+            ShowFirstRunMessage(message, InfoBarSeverity.Error);
+            await App.Services.Log.WriteAsync("ERROR", $"First-run preparation failed: {exception}");
+        }
+        finally
+        {
+            SetFirstRunBusy(false);
+        }
+    }
+
+    private void ShowFirstRunOverlay(
+        string? message = null,
+        InfoBarSeverity severity = InfoBarSeverity.Informational)
+    {
+        FirstRunOverlay.Visibility = Visibility.Visible;
+        try
+        {
+            FirstRunPasswordInput.Password = App.Services.CurrentSettings.DataAccessPassword;
+        }
+        catch
+        {
+            // The overlay must stay usable even when service construction failed.
+        }
+        FirstRunStatusText.Text = "等待获取首个有效预报";
+        FirstRunProbeButton.IsEnabled =
+            !string.IsNullOrWhiteSpace(FirstRunPasswordInput.Password);
+        if (!string.IsNullOrWhiteSpace(message))
+        {
+            ShowFirstRunMessage(message, severity);
+        }
+        else
+        {
+            FirstRunInfo.IsOpen = false;
+        }
+
+        if (string.IsNullOrWhiteSpace(FirstRunPasswordInput.Password))
+        {
+            FirstRunPasswordInput.Focus(FocusState.Programmatic);
+        }
+        else
+        {
+            FirstRunProbeButton.Focus(FocusState.Programmatic);
+        }
+    }
+
+    private void ShowFirstRunMessage(string message, InfoBarSeverity severity)
+    {
+        FirstRunInfo.Severity = severity;
+        FirstRunInfo.Title = severity switch
+        {
+            InfoBarSeverity.Error => "未能准备数据",
+            InfoBarSeverity.Warning => "需要确认",
+            InfoBarSeverity.Success => "准备完成",
+            _ => "提示",
+        };
+        FirstRunInfo.Message = message;
+        FirstRunInfo.IsOpen = true;
+    }
+
+    private void SetFirstRunBusy(bool isBusy, string? status = null)
+    {
+        _firstRunBusy = isBusy;
+        FirstRunProgressRing.IsActive = isBusy;
+        FirstRunPasswordInput.IsEnabled = !isBusy;
+        FirstRunProbeButton.IsEnabled =
+            !isBusy && !string.IsNullOrWhiteSpace(FirstRunPasswordInput.Password);
+        FirstRunImportButton.IsEnabled = !isBusy;
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            FirstRunStatusText.Text = status;
+        }
+    }
+
+    private void HideFirstRunOverlayIfReady(ForecastIndex index)
+    {
+        if (index.Runs.Count == 0)
+        {
+            return;
+        }
+
+        FirstRunOverlay.Visibility = Visibility.Collapsed;
+        FirstRunInfo.IsOpen = false;
+        FirstRunProgressRing.IsActive = false;
     }
 
     private async void SettingsButton_Click(object sender, RoutedEventArgs e)
@@ -350,7 +556,14 @@ public sealed partial class MainPage : Page
 
     private void BackgroundSync_StatusChanged(object? sender, BackgroundSyncStatus status)
     {
-        DispatcherQueue.TryEnqueue(() => ApplyBackgroundStatus(status));
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            ApplyBackgroundStatus(status);
+            if (FirstRunOverlay.Visibility == Visibility.Visible)
+            {
+                FirstRunStatusText.Text = status.Message;
+            }
+        });
     }
 
     private void BackgroundSync_IndexUpdated(object? sender, ForecastIndex index)
@@ -361,6 +574,7 @@ public sealed partial class MainPage : Page
             var preferredInit = _selectedRun?.InitKey;
             ApplyIndex(index, preferredModel, preferredInit);
             ApplyBackgroundStatus(App.Services.BackgroundSync.CurrentStatus);
+            HideFirstRunOverlayIfReady(index);
         });
     }
 
@@ -784,6 +998,20 @@ public sealed partial class MainPage : Page
             return $"{exception.Message} 请检查 Python 数据组件。";
         }
         return exception.Message;
+    }
+
+    private static void WriteFallbackStartupError(Exception exception)
+    {
+        try
+        {
+            File.AppendAllText(
+                Path.Combine(Path.GetTempPath(), "AISky-startup-diagnostic.log"),
+                $"{DateTimeOffset.Now:O}{Environment.NewLine}{exception}{Environment.NewLine}{Environment.NewLine}");
+        }
+        catch
+        {
+            // The visible first-run error remains the final fallback.
+        }
     }
 
     private void PostMapMessage(object payload)

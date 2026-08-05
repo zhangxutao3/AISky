@@ -200,7 +200,7 @@
                     VerticalAlignment="Center"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     Style="{StaticResource CaptionTextBlockStyle}"
-                    Text="版本 0.6.0" />
+                    Text="版本 0.7.0" />
             </Grid>
         </StackPanel>
     </ScrollViewer>

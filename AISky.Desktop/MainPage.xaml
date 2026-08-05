@@ -21,6 +21,7 @@
                         <Setter Target="CompactRunButton.Visibility" Value="Visible" />
                         <Setter Target="UpdateStatus.Visibility" Value="Collapsed" />
                         <Setter Target="LayerPanel.Width" Value="148" />
+                        <Setter Target="LayerPanel.MaxHeight" Value="430" />
                         <Setter Target="LayerPanel.Margin" Value="0,78,8,0" />
                         <Setter Target="LayerPanel.Padding" Value="8" />
                         <Setter Target="LayerHint.Visibility" Value="Collapsed" />
@@ -29,6 +30,8 @@
                         <Setter Target="TopChrome.Margin" Value="8,8,8,0" />
                         <Setter Target="TimelinePanel.Margin" Value="76,0,8,8" />
                         <Setter Target="TimelineCaption.Visibility" Value="Collapsed" />
+                        <Setter Target="FirstRunCard.Width" Value="340" />
+                        <Setter Target="FirstRunCard.Padding" Value="22" />
                     </VisualState.Setters>
                 </VisualState>
                 <VisualState x:Name="Medium">
@@ -41,6 +44,7 @@
                         <Setter Target="ComparePicker.Visibility" Value="Collapsed" />
                         <Setter Target="UpdateStatus.Visibility" Value="Collapsed" />
                         <Setter Target="LayerPanel.Width" Value="208" />
+                        <Setter Target="LayerPanel.MaxHeight" Value="480" />
                         <Setter Target="LayerPanel.Margin" Value="0,86,12,0" />
                         <Setter Target="LayerPanel.Padding" Value="10" />
                         <Setter Target="LayerHint.Visibility" Value="Visible" />
@@ -49,6 +53,8 @@
                         <Setter Target="TopChrome.Margin" Value="12,12,12,0" />
                         <Setter Target="TimelinePanel.Margin" Value="96,0,12,12" />
                         <Setter Target="TimelineCaption.Visibility" Value="Visible" />
+                        <Setter Target="FirstRunCard.Width" Value="520" />
+                        <Setter Target="FirstRunCard.Padding" Value="30" />
                     </VisualState.Setters>
                 </VisualState>
                 <VisualState x:Name="Wide">
@@ -61,6 +67,7 @@
                         <Setter Target="ComparePicker.Visibility" Value="Visible" />
                         <Setter Target="UpdateStatus.Visibility" Value="Visible" />
                         <Setter Target="LayerPanel.Width" Value="224" />
+                        <Setter Target="LayerPanel.MaxHeight" Value="560" />
                         <Setter Target="LayerPanel.Margin" Value="0,88,18,0" />
                         <Setter Target="LayerPanel.Padding" Value="12" />
                         <Setter Target="LayerHint.Visibility" Value="Visible" />
@@ -69,6 +76,8 @@
                         <Setter Target="TopChrome.Margin" Value="18,14,18,0" />
                         <Setter Target="TimelinePanel.Margin" Value="116,0,18,16" />
                         <Setter Target="TimelineCaption.Visibility" Value="Visible" />
+                        <Setter Target="FirstRunCard.Width" Value="560" />
+                        <Setter Target="FirstRunCard.Padding" Value="34" />
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
@@ -544,5 +553,137 @@
                 </Grid>
             </Grid>
         </Border>
+
+        <Grid
+            x:Name="FirstRunOverlay"
+            Background="#F51A343D"
+            Visibility="Collapsed">
+            <ScrollViewer
+                HorizontalScrollBarVisibility="Disabled"
+                VerticalScrollBarVisibility="Auto"
+                VerticalScrollMode="Auto">
+                <Border
+                    x:Name="FirstRunCard"
+                    Width="560"
+                    Margin="16,32"
+                    Padding="34"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    AutomationProperties.Name="首次数据准备"
+                    Background="#FA112A33"
+                    BorderBrush="#3DFFFFFF"
+                    BorderThickness="1"
+                    CornerRadius="22">
+                    <StackPanel Spacing="18">
+                        <Border
+                            Width="58"
+                            Height="58"
+                            HorizontalAlignment="Left"
+                            Background="#2632C3D6"
+                            CornerRadius="18">
+                            <FontIcon
+                                Foreground="{StaticResource AISkyAccentBrightBrush}"
+                                FontSize="27"
+                                Glyph="&#xE895;" />
+                        </Border>
+
+                        <StackPanel Spacing="7">
+                            <TextBlock
+                                Foreground="White"
+                                FontSize="28"
+                                FontWeight="SemiBold"
+                                Text="准备你的第一份预报"
+                                TextWrapping="Wrap" />
+                            <TextBlock
+                                Foreground="{StaticResource AISkyDarkMutedTextBrush}"
+                                FontSize="15"
+                                LineHeight="23"
+                                Text="AISky 需要至少一个完整的本地 NetCDF 时次。输入数据访问密码后，软件会从最近 3 天自动寻找最新起报；也可以直接导入已有文件。"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+
+                        <Border
+                            Padding="14,12"
+                            Background="#12FFFFFF"
+                            CornerRadius="10">
+                            <Grid ColumnSpacing="11">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <ProgressRing
+                                    x:Name="FirstRunProgressRing"
+                                    Width="22"
+                                    Height="22"
+                                    Foreground="{StaticResource AISkyAccentBrightBrush}"
+                                    IsActive="False" />
+                                <StackPanel Grid.Column="1" Spacing="2">
+                                    <TextBlock
+                                        x:Name="FirstRunStatusText"
+                                        Foreground="White"
+                                        Style="{StaticResource BodyStrongTextBlockStyle}"
+                                        Text="等待开始" />
+                                    <TextBlock
+                                        Foreground="{StaticResource AISkyDarkMutedTextBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        Text="所有起报与预报时间均使用 UTC" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <StackPanel Spacing="7">
+                            <TextBlock
+                                Foreground="White"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="数据访问密码" />
+                            <PasswordBox
+                                x:Name="FirstRunPasswordInput"
+                                MinHeight="44"
+                                AutomationProperties.Name="数据访问密码"
+                                MaxLength="128"
+                                PasswordChanged="FirstRunPasswordInput_PasswordChanged"
+                                PasswordRevealMode="Peek"
+                                PlaceholderText="请输入服务器访问密码" />
+                        </StackPanel>
+
+                        <InfoBar
+                            x:Name="FirstRunInfo"
+                            IsClosable="False"
+                            IsOpen="False"
+                            Message=""
+                            Severity="Informational"
+                            Title="提示" />
+
+                        <Grid ColumnSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Button
+                                x:Name="FirstRunProbeButton"
+                                MinHeight="46"
+                                HorizontalAlignment="Stretch"
+                                AutomationProperties.Name="寻找最新预报"
+                                Click="FirstRunProbeButton_Click"
+                                Content="寻找最新预报"
+                                Style="{StaticResource AccentButtonStyle}" />
+                            <Button
+                                x:Name="FirstRunImportButton"
+                                Grid.Column="1"
+                                MinHeight="46"
+                                AutomationProperties.Name="导入本地 NetCDF"
+                                Click="FirstRunImportButton_Click"
+                                Content="导入本地 NetCDF" />
+                        </Grid>
+
+                        <TextBlock
+                            Foreground="{StaticResource AISkyDarkMutedTextBrush}"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Text="数据将保存在本机；下载中断时会自动重试，不会把不完整文件加入索引。"
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+            </ScrollViewer>
+        </Grid>
     </Grid>
 </Page>

@@ -468,7 +468,13 @@ public sealed class PythonDataWorkerClient(AppPaths paths) : IDataWorkerClient
     private static string ResolvePythonExecutable()
     {
         var configured = Environment.GetEnvironmentVariable("AISKY_PYTHON");
-        return string.IsNullOrWhiteSpace(configured) ? "python.exe" : configured;
+        if (!string.IsNullOrWhiteSpace(configured))
+        {
+            return configured;
+        }
+
+        var bundled = Path.Combine(AppContext.BaseDirectory, "Python", "python.exe");
+        return File.Exists(bundled) ? bundled : "python.exe";
     }
 
     private static string FriendlyError(Exception exception)
@@ -481,7 +487,7 @@ public sealed class PythonDataWorkerClient(AppPaths paths) : IDataWorkerClient
         if (text.Contains("cannot find", StringComparison.OrdinalIgnoreCase)
             || text.Contains("找不到", StringComparison.OrdinalIgnoreCase))
         {
-            return "未找到 Python。可在 AISKY_PYTHON 环境变量中指定 python.exe。";
+            return "数据运行时缺失或损坏，请重新解压完整的 AISky 发布包。";
         }
         return text;
     }

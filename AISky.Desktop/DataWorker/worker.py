@@ -18,6 +18,7 @@ import sys
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from contextlib import closing
 from itertools import chain
 from pathlib import Path
 from typing import Any, Iterable
@@ -130,13 +131,30 @@ def parse_filename(path: Path) -> dict[str, Any]:
     return result
 
 
-def initialize_database(database_path: Path, schema_path: Path) -> None:
+def initialize_database(database_path: Path, schema_path: Path) -> Path | None:
     database_path.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(database_path) as connection:
-        connection.execute("PRAGMA journal_mode=WAL")
-        connection.execute("PRAGMA foreign_keys=ON")
-        connection.executescript(schema_path.read_text(encoding="utf-8"))
-        migrate_database(connection)
+    try:
+        with closing(sqlite3.connect(database_path)) as connection:
+            connection.execute("PRAGMA journal_mode=WAL")
+            connection.execute("PRAGMA foreign_keys=ON")
+            connection.executescript(schema_path.read_text(encoding="utf-8"))
+            migrate_database(connection)
+        return None
+    except sqlite3.DatabaseError:
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        backup = database_path.with_name(
+            f"{database_path.name}.corrupt-{timestamp}"
+        )
+        if database_path.exists():
+            database_path.replace(backup)
+        for suffix in ("-wal", "-shm"):
+            Path(f"{database_path}{suffix}").unlink(missing_ok=True)
+        with closing(sqlite3.connect(database_path)) as connection:
+            connection.execute("PRAGMA journal_mode=WAL")
+            connection.execute("PRAGMA foreign_keys=ON")
+            connection.executescript(schema_path.read_text(encoding="utf-8"))
+            migrate_database(connection)
+        return backup
 
 
 def migrate_database(connection: sqlite3.Connection) -> None:
@@ -587,6 +605,9 @@ def download_share_file(
         stream=True,
         timeout=(15, 180),
     )
+    if response.status_code == 403:
+        response.close()
+        raise PermissionError("访问密码验证失败，请重新填写数据访问密码。")
     if response.status_code in (404, 410):
         return False
     response.raise_for_status()
@@ -594,7 +615,9 @@ def download_share_file(
     first_chunk = next(iterator, b"")
     if not response_is_netcdf(first_chunk):
         response.close()
-        return False
+        raise PermissionError(
+            "访问密码验证失败，或服务器返回了非 NetCDF 内容。"
+        )
 
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = output.with_suffix(output.suffix + ".part")
@@ -646,7 +669,11 @@ def upsert_download_job(
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ON CONFLICT(id) DO UPDATE SET
                 state=excluded.state,
-                attempts=download_jobs.attempts + 1,
+                attempts=CASE
+                    WHEN excluded.state='running'
+                    THEN download_jobs.attempts + 1
+                    ELSE download_jobs.attempts
+                END,
                 error_message=excluded.error_message,
                 updated_at_utc=CURRENT_TIMESTAMP
             """,
@@ -730,7 +757,30 @@ def run_download_range(args: argparse.Namespace) -> dict[str, Any]:
                         forecast_key, version, url, target, "running"
                     )
                     try:
-                        if download_share_file(session, url, args.password, target, job_id):
+                        downloaded_file = False
+                        for attempt in range(1, 4):
+                            try:
+                                downloaded_file = download_share_file(
+                                    session, url, args.password, target, job_id
+                                )
+                                break
+                            except (requests.ConnectionError, requests.Timeout) as error:
+                                if attempt >= 3:
+                                    raise
+                                upsert_download_job(
+                                    Path(args.database), job_id, args.model, init_key,
+                                    forecast_key, version, url, target, "running", str(error)
+                                )
+                                emit(
+                                    "warning",
+                                    operation="download",
+                                    message=(
+                                        f"{filename} 网络中断，正在进行第 {attempt + 1}/3 次重试"
+                                    ),
+                                )
+                                time.sleep(attempt)
+
+                        if downloaded_file:
                             ensure_netcdf(target)
                             process_netcdf(target, Path(args.render_root), Path(args.database))
                             upsert_download_job(
@@ -746,7 +796,21 @@ def run_download_range(args: argparse.Namespace) -> dict[str, Any]:
                             forecast_key, version, url, target, "not_found",
                             "远端未找到该版本文件"
                         )
+                    except PermissionError as error:
+                        failed += 1
+                        upsert_download_job(
+                            Path(args.database), job_id, args.model, init_key,
+                            forecast_key, version, url, target, "failed", str(error)
+                        )
+                        raise RuntimeError(
+                            "访问密码验证失败，请在设置中重新填写后重试。"
+                        ) from error
                     except Exception as error:
+                        if target.exists():
+                            try:
+                                ensure_netcdf(target)
+                            except Exception:
+                                target.unlink(missing_ok=True)
                         failed += 1
                         upsert_download_job(
                             Path(args.database), job_id, args.model, init_key,
@@ -957,7 +1021,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--model", choices=("AISky-Energy", "AISky-SDS"))
     parser.add_argument("--start")
     parser.add_argument("--end")
-    parser.add_argument("--password", default="1234")
+    parser.add_argument("--password", default="")
     parser.add_argument("--max-lead-hours", type=int, default=360)
     parser.add_argument("--max-version", type=int, default=9)
     parser.add_argument("--base-url")
@@ -973,9 +1037,18 @@ def main() -> None:
     args = build_parser().parse_args()
     if args.init_only:
         args.command = "init"
-    initialize_database(args.database, args.schema)
+    recovered_database = initialize_database(args.database, args.schema)
 
     try:
+        if recovered_database is not None:
+            emit(
+                "warning",
+                operation="database",
+                message=(
+                    "本地索引数据库损坏，已自动重建；"
+                    f"原文件保存在 {recovered_database.name}"
+                ),
+            )
         if args.command == "init":
             emit("ready", database=str(args.database))
             return

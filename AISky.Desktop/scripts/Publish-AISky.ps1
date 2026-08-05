@@ -16,6 +16,9 @@ $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $workspaceRoot = (Resolve-Path (Join-Path $projectRoot '..')).Path
 $appProject = Join-Path $projectRoot 'AISky.Desktop.csproj'
 $updaterProject = Join-Path $workspaceRoot 'AISky.Updater\AISky.Updater.csproj'
+$pythonVersion = '3.11.9'
+$pythonArchiveName = "python-$pythonVersion-embed-amd64.zip"
+$pythonDownloadUrl = "https://www.python.org/ftp/python/$pythonVersion/$pythonArchiveName"
 
 if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
     $OutputDirectory = Join-Path $workspaceRoot "artifacts\v$Version"
@@ -85,6 +88,43 @@ if (-not (Test-Path -LiteralPath $updaterExecutable)) {
 Copy-Item -LiteralPath $updaterExecutable -Destination $stageDirectory
 Set-Content -LiteralPath (Join-Path $stageDirectory 'VERSION.txt') -Value $Version -Encoding UTF8
 
+Write-Host "正在准备内置 Python $pythonVersion 数据运行时..."
+$pythonArchive = Join-Path $OutputDirectory $pythonArchiveName
+$pythonRuntimeDirectory = Join-Path $stageDirectory 'Python'
+$pythonSitePackages = Join-Path $pythonRuntimeDirectory 'Lib\site-packages'
+Invoke-WebRequest -Uri $pythonDownloadUrl -OutFile $pythonArchive
+Expand-Archive -LiteralPath $pythonArchive -DestinationPath $pythonRuntimeDirectory
+New-Item -ItemType Directory -Path $pythonSitePackages -Force | Out-Null
+
+$pythonPathFile = Join-Path $pythonRuntimeDirectory 'python311._pth'
+if (-not (Test-Path -LiteralPath $pythonPathFile)) {
+    throw '内置 Python 缺少 python311._pth。'
+}
+$pythonPathEntries = Get-Content -LiteralPath $pythonPathFile
+$pythonPathEntries = $pythonPathEntries | ForEach-Object {
+    if ($_ -eq '#import site') { 'import site' } else { $_ }
+}
+if ($pythonPathEntries -notcontains 'Lib\site-packages') {
+    $pythonPathEntries += 'Lib\site-packages'
+}
+$pythonPathEntries | Set-Content -LiteralPath $pythonPathFile -Encoding ASCII
+
+python -m pip install `
+    --disable-pip-version-check `
+    --no-compile `
+    --only-binary=:all: `
+    --target $pythonSitePackages `
+    -r (Join-Path $projectRoot 'DataWorker\requirements.txt')
+if ($LASTEXITCODE -ne 0) {
+    throw '内置 Python 的 NetCDF 依赖安装失败。'
+}
+
+$bundledPython = Join-Path $pythonRuntimeDirectory 'python.exe'
+& $bundledPython -c 'import netCDF4, numpy, requests; print(netCDF4.__version__, numpy.__version__, requests.__version__)'
+if ($LASTEXITCODE -ne 0) {
+    throw '内置 Python 数据运行时自检失败。'
+}
+
 $requiredReleaseFiles = @(
     'AISky.Desktop.exe',
     'AISky.Desktop.pri',
@@ -94,6 +134,8 @@ $requiredReleaseFiles = @(
     'SettingsDialog.xbf',
     'UpdateDialog.xbf',
     'AISky.Updater.exe',
+    'Python\python.exe',
+    'Python\Lib\site-packages\netCDF4\__init__.py',
     'Assets\AppIcon.ico',
     'MapHost\index.html'
 )

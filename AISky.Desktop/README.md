@@ -20,17 +20,20 @@ dotnet build .\AISky.Desktop.csproj -c Debug -p:Platform=x64
 %LOCALAPPDATA%\AISky\Desktop\
 ```
 
-## 首次准备
+## 源码开发准备
 
-第四阶段的 NetCDF 解析与下载由隔离的 Python 进程完成。首次使用前安装依赖：
+源码调试时，NetCDF 解析与下载由隔离的 Python 进程完成。首次调试前安装依赖：
 
 ```powershell
 python -m pip install -r .\DataWorker\requirements.txt
 ```
 
+正式绿色发布包已经内置 Python、NumPy、netCDF4 和 requests，普通用户无需安装
+Python 或 Windows App SDK，解压后直接运行即可。
+
 程序使用 UTC 显示起报和预报时刻，避免跨时区时产生歧义。
 
-## 第四至第六阶段已实现
+## 已实现
 
 - AISky-Energy / AISky-SDS 模型、起报时刻和预报时刻联动选择
 - NetCDF4 文件完整性校验、变量读取和二维场渲染缓存
@@ -51,6 +54,9 @@ python -m pip install -r .\DataWorker\requirements.txt
 - 更新包流式下载、文件大小与 SHA-256 校验，以及失败可恢复的独立更新助手
 - 可选的登录 Windows 后在通知区启动
 - 一键生成绿色免安装包并通过 GitHub CLI 创建 Release 的发布脚本
+- 无本地数据时显示首次启动引导，自动回退探测最近 3 天的可用起报
+- 下载断线自动重试、损坏 NetCDF 隔离、损坏 SQLite 自动备份重建
+- 内置数据运行时，发布包不再依赖电脑预装 Python
 
 应用数据目录：
 
@@ -70,11 +76,11 @@ POST 下载方式限制，网络中断后的字节级断点续传不能保证；
 “关闭主窗口后继续运行”默认开启。若要彻底退出，请使用托盘右键菜单中的
 “退出 AISky”，或先在设置中关闭该选项。
 
-当前程序版本为 `0.6.0`，更新源为
+当前程序版本为 `0.7.0`，更新源为
 [`zhangxutao3/AISky`](https://github.com/zhangxutao3/AISky)。
 点击“检查软件更新”会读取该仓库的最新 GitHub Release，并匹配
 `AISky-Desktop-win-x64.zip` 更新包。发布新版本请参考
 [`docs/RELEASING.md`](docs/RELEASING.md)。
 
-第七阶段将集中进行首次启动、断网、损坏文件、托盘、更新与打包后运行测试，并继续
-优化性能和用户说明。
+普通用户请阅读 [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md)，测试结果见
+[`docs/TEST_REPORT-v0.7.0.md`](docs/TEST_REPORT-v0.7.0.md)。
