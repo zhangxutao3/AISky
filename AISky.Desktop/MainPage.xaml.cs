@@ -714,6 +714,7 @@ public sealed partial class MainPage : Page
             return;
         }
         UpdateColorBar(layer);
+        UpdateProductContext();
         PostMapMessage(new { type = "set-layer", layer = layer.Id });
     }
 
@@ -868,7 +869,7 @@ public sealed partial class MainPage : Page
             };
             dayPanel.Children.Add(new TextBlock
             {
-                Text = $"第 {dayGroup.Key + 1} 天 · {FormatUtcKey(dayGroup.First().Run.ForecastKey, "MM-dd")}",
+                Text = $"第 {dayGroup.Key + 1} 组 · {FormatUtcKey(dayGroup.First().Run.ForecastKey, "MM-dd")}",
                 FontSize = 10,
                 Opacity = 0.72,
             });
@@ -937,6 +938,7 @@ public sealed partial class MainPage : Page
             _lastLayerSetKey = null;
             _lastMapSeriesKey = null;
             UpdateEmptyColorBar();
+            UpdateProductContext();
             SendSelectedRunToMap();
             return;
         }
@@ -993,7 +995,28 @@ public sealed partial class MainPage : Page
         CompactRunButton.Content = $"{run.Model} · {FormatLead(run.LeadHours)}";
         ServiceStatusText.Text =
             $"{run.Model} · 起报 {FormatUtcKey(run.InitKey, "MM-dd HH:mm")} UTC · {run.Version}";
+        UpdateProductContext();
         SendSelectedRunToMap();
+    }
+
+    private void UpdateProductContext()
+    {
+        if (_selectedRun is null)
+        {
+            ProductStatusText.Text = "等待预报产品";
+            LayerContextText.Text = "暂无可用时次";
+            ToolTipService.SetToolTip(UpdateStatus, null);
+            return;
+        }
+
+        var layer = LayerList.SelectedItem as LayerItem;
+        var code = layer?.Code ?? _selectedRun.Layers.FirstOrDefault()?.Label ?? "预报产品";
+        ProductStatusText.Text = $"{code} · {FormatLead(_selectedRun.LeadHours)}";
+        LayerContextText.Text =
+            $"{_selectedRun.Model} · {FormatLead(_selectedRun.LeadHours)}";
+        ToolTipService.SetToolTip(
+            UpdateStatus,
+            $"{code} {layer?.Name} · {_selectedRun.Model} · 起报 {FormatUtcKey(_selectedRun.InitKey, "MM-dd HH:mm")} UTC");
     }
 
     private void SendSelectedRunToMap(bool forceFull = false)
@@ -1012,6 +1035,9 @@ public sealed partial class MainPage : Page
         var run = _selectedRun;
         var selectedLayer = (LayerList.SelectedItem as LayerItem)?.Id
             ?? run.Layers.FirstOrDefault()?.Id;
+        var nextRun = _currentForecastRuns.Count > 1
+            ? _currentForecastRuns[(_currentForecastIndex + 1) % _currentForecastRuns.Count]
+            : null;
         var seriesKey =
             $"{run.Model}|{run.InitKey}|{_currentForecastRuns.Count}|{_currentForecastRuns.FirstOrDefault()?.Id}|{_currentForecastRuns.LastOrDefault()?.Id}";
         if (!forceFull && string.Equals(_lastMapSeriesKey, seriesKey, StringComparison.Ordinal))
@@ -1021,6 +1047,7 @@ public sealed partial class MainPage : Page
                 type = "set-frame",
                 layer = selectedLayer,
                 run = CreateMapRun(run),
+                nextRun = nextRun is null ? null : CreateMapRun(nextRun),
             });
             return;
         }
@@ -1031,6 +1058,7 @@ public sealed partial class MainPage : Page
             type = "set-data",
             layer = selectedLayer,
             run = CreateMapRun(run),
+            nextRun = nextRun is null ? null : CreateMapRun(nextRun),
             series = _currentForecastRuns.Select(seriesRun => new
             {
                 id = seriesRun.Id,

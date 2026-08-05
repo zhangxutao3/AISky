@@ -30,6 +30,12 @@ public sealed class AppPaths
     public static AppPaths CreateDefault()
     {
         var overrideRoot = Environment.GetEnvironmentVariable("AISKY_DATA_ROOT");
+        if (string.IsNullOrWhiteSpace(overrideRoot))
+        {
+            overrideRoot = Environment.GetEnvironmentVariable(
+                "AISKY_DATA_ROOT",
+                EnvironmentVariableTarget.User);
+        }
         if (!string.IsNullOrWhiteSpace(overrideRoot))
         {
             return new AppPaths(Path.GetFullPath(

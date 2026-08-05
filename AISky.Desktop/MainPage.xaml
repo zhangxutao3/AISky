@@ -43,11 +43,11 @@
                         <Setter Target="BrandLockup.Visibility" Value="Collapsed" />
                         <Setter Target="UpdateStatus.Visibility" Value="Collapsed" />
                         <Setter Target="RightRail.Width" Value="168" />
-                        <Setter Target="RightRail.Margin" Value="0,78,8,104" />
+                        <Setter Target="RightRail.Margin" Value="0,82,8,112" />
                         <Setter Target="LayerPanel.Padding" Value="8" />
                         <Setter Target="LayerHint.Visibility" Value="Collapsed" />
-                        <Setter Target="TopChrome.Margin" Value="8,8,8,0" />
-                        <Setter Target="TimelinePanel.Margin" Value="76,0,8,8" />
+                        <Setter Target="TopChrome.Margin" Value="40,20,8,0" />
+                        <Setter Target="TimelinePanel.Margin" Value="8,0,8,8" />
                         <Setter Target="TimelineCaption.Visibility" Value="Collapsed" />
                         <Setter Target="FirstRunCard.Width" Value="340" />
                         <Setter Target="FirstRunCard.Padding" Value="22" />
@@ -63,11 +63,11 @@
                         <Setter Target="BrandLockup.Visibility" Value="Collapsed" />
                         <Setter Target="UpdateStatus.Visibility" Value="Collapsed" />
                         <Setter Target="RightRail.Width" Value="228" />
-                        <Setter Target="RightRail.Margin" Value="0,86,12,110" />
+                        <Setter Target="RightRail.Margin" Value="0,84,12,118" />
                         <Setter Target="LayerPanel.Padding" Value="10" />
                         <Setter Target="LayerHint.Visibility" Value="Visible" />
-                        <Setter Target="TopChrome.Margin" Value="12,12,12,0" />
-                        <Setter Target="TimelinePanel.Margin" Value="96,0,12,12" />
+                        <Setter Target="TopChrome.Margin" Value="42,20,12,0" />
+                        <Setter Target="TimelinePanel.Margin" Value="12,0,12,12" />
                         <Setter Target="TimelineCaption.Visibility" Value="Visible" />
                         <Setter Target="FirstRunCard.Width" Value="520" />
                         <Setter Target="FirstRunCard.Padding" Value="30" />
@@ -83,11 +83,11 @@
                         <Setter Target="BrandLockup.Visibility" Value="Visible" />
                         <Setter Target="UpdateStatus.Visibility" Value="Visible" />
                         <Setter Target="RightRail.Width" Value="252" />
-                        <Setter Target="RightRail.Margin" Value="0,88,18,116" />
+                        <Setter Target="RightRail.Margin" Value="0,86,18,124" />
                         <Setter Target="LayerPanel.Padding" Value="12" />
                         <Setter Target="LayerHint.Visibility" Value="Visible" />
-                        <Setter Target="TopChrome.Margin" Value="18,14,18,0" />
-                        <Setter Target="TimelinePanel.Margin" Value="116,0,18,16" />
+                        <Setter Target="TopChrome.Margin" Value="44,20,18,0" />
+                        <Setter Target="TimelinePanel.Margin" Value="18,0,18,16" />
                         <Setter Target="TimelineCaption.Visibility" Value="Visible" />
                         <Setter Target="FirstRunCard.Width" Value="560" />
                         <Setter Target="FirstRunCard.Padding" Value="34" />
@@ -134,7 +134,7 @@
 
         <Grid
             x:Name="TopChrome"
-            Margin="18,14,18,0"
+            Margin="44,20,18,0"
             VerticalAlignment="Top"
             ColumnSpacing="10">
             <Grid.ColumnDefinitions>
@@ -143,7 +143,11 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <Border Grid.Column="0" Style="{StaticResource AISkyFloatingPanelStyle}">
+            <Border
+                x:Name="CommandSurface"
+                Grid.Column="0"
+                Height="58"
+                Style="{StaticResource AISkyFloatingPanelStyle}">
                 <Grid ColumnSpacing="4">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
@@ -251,7 +255,7 @@
             <Button
                 x:Name="CompactRunButton"
                 Grid.Column="1"
-                MinHeight="48"
+                Height="58"
                 Padding="18,0"
                 HorizontalAlignment="Center"
                 AutomationProperties.Name="切换模型"
@@ -264,7 +268,8 @@
                 x:Name="RunPickerBorder"
                 Grid.Column="1"
                 MaxWidth="760"
-                Padding="12,8,12,10"
+                Height="58"
+                Padding="10,8"
                 HorizontalAlignment="Center"
                 Style="{StaticResource AISkyFloatingPanelStyle}">
                 <Grid ColumnSpacing="8">
@@ -278,10 +283,10 @@
                         Grid.Column="0"
                         MinWidth="150"
                         AutomationProperties.Name="模型"
-                        Header="模型"
                         SelectedIndex="0"
                         SelectionChanged="ModelPicker_SelectionChanged"
-                        Style="{StaticResource AISkyCompactComboBoxStyle}">
+                        Style="{StaticResource AISkyCompactComboBoxStyle}"
+                        ToolTipService.ToolTip="模型">
                         <ComboBoxItem Content="AISky-Energy" />
                         <ComboBoxItem Content="AISky-SDS" />
                     </ComboBox>
@@ -290,26 +295,26 @@
                         Grid.Column="1"
                         MinWidth="164"
                         AutomationProperties.Name="起报时间 UTC"
-                        Header="起报（UTC）"
                         SelectionChanged="InitPicker_SelectionChanged"
-                        Style="{StaticResource AISkyCompactComboBoxStyle}" />
+                        Style="{StaticResource AISkyCompactComboBoxStyle}"
+                        ToolTipService.ToolTip="起报时间（UTC）" />
                     <ComboBox
                         x:Name="ForecastPicker"
                         Grid.Column="2"
                         MinWidth="176"
                         AutomationProperties.Name="预报时效 UTC"
-                        Header="预报（UTC）"
                         SelectionChanged="ForecastPicker_SelectionChanged"
-                        Style="{StaticResource AISkyCompactComboBoxStyle}" />
+                        Style="{StaticResource AISkyCompactComboBoxStyle}"
+                        ToolTipService.ToolTip="预报时效（UTC）" />
                 </Grid>
             </Border>
 
             <Border
                 x:Name="UpdateStatus"
                 Grid.Column="2"
-                Width="242"
-                MinHeight="58"
-                Padding="14,9"
+                Width="{Binding ActualWidth, ElementName=RightRail}"
+                Height="58"
+                Padding="12,6"
                 VerticalAlignment="Top"
                 Style="{StaticResource AISkyFloatingPanelStyle}">
                 <Grid ColumnSpacing="10">
@@ -319,19 +324,27 @@
                     </Grid.ColumnDefinitions>
                     <Ellipse
                         x:Name="ServiceStatusDot"
-                        Width="9"
-                        Height="9"
-                        VerticalAlignment="Center"
+                        Width="8"
+                        Height="8"
+                        VerticalAlignment="Top"
+                        Margin="0,5,0,0"
                         Fill="{StaticResource AISkySuccessBrush}" />
-                    <StackPanel Grid.Column="1" Spacing="1">
+                    <StackPanel Grid.Column="1" Spacing="-1">
+                        <TextBlock
+                            x:Name="ProductStatusText"
+                            FontSize="13"
+                            FontWeight="SemiBold"
+                            Text="等待预报产品"
+                            TextTrimming="CharacterEllipsis" />
                         <TextBlock
                             x:Name="ServiceStatusTitle"
-                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Foreground="{ThemeResource AISkyTextMutedBrush}"
+                            FontSize="10"
                             Text="本地数据服务" />
                         <TextBlock
                             x:Name="ServiceStatusText"
                             Foreground="{ThemeResource AISkyTextMutedBrush}"
-                            Style="{StaticResource CaptionTextBlockStyle}"
+                            FontSize="10"
                             Text="正在初始化"
                             TextTrimming="CharacterEllipsis" />
                     </StackPanel>
@@ -342,7 +355,7 @@
         <Grid
             x:Name="RightRail"
             Width="252"
-            Margin="0,88,18,116"
+            Margin="0,86,18,124"
             HorizontalAlignment="Right"
             VerticalAlignment="Stretch"
             RowSpacing="10">
@@ -373,9 +386,11 @@
                             Style="{StaticResource BodyStrongTextBlockStyle}"
                             Text="预报图层" />
                         <TextBlock
+                            x:Name="LayerContextText"
                             Foreground="{ThemeResource AISkyTextMutedBrush}"
                             Style="{StaticResource CaptionTextBlockStyle}"
-                            Text="点击切换当前产品" />
+                            Text="等待预报产品"
+                            TextTrimming="CharacterEllipsis" />
                     </StackPanel>
                     <Border
                         Grid.Column="1"
@@ -519,8 +534,8 @@
 
         <Border
             x:Name="TimelinePanel"
-            Margin="116,0,18,16"
-            Padding="14,11"
+            Margin="18,0,18,16"
+            Padding="12,9"
             VerticalAlignment="Bottom"
             Style="{StaticResource AISkyFloatingPanelStyle}">
             <Grid ColumnSpacing="14">
@@ -540,7 +555,7 @@
                 <StackPanel
                     x:Name="TimelineCaption"
                     Grid.Column="1"
-                    Width="132"
+                    Width="118"
                     VerticalAlignment="Center"
                     Spacing="0">
                     <TextBlock
@@ -585,7 +600,8 @@
                     </Grid>
                     <ScrollViewer
                         Grid.Row="1"
-                        MaxHeight="50"
+                        Height="58"
+                        Padding="0,0,0,14"
                         AutomationProperties.Name="按日期分组的预报时间轴"
                         HorizontalScrollBarVisibility="Auto"
                         HorizontalScrollMode="Enabled"

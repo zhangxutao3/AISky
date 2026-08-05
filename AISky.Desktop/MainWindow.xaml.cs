@@ -32,6 +32,10 @@ public sealed partial class MainWindow : Window
 
         AppWindow.SetIcon("Assets/AppIcon.ico");
         AppWindow.Resize(new SizeInt32(1440, 900));
+        if (AppWindow.Presenter is OverlappedPresenter presenter)
+        {
+            presenter.Maximize();
+        }
         AppWindow.Closing += AppWindow_Closing;
         Closed += MainWindow_Closed;
 

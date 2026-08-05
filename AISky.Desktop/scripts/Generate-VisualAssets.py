@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import math
 import sys
 from pathlib import Path
@@ -45,7 +44,6 @@ def read_spec(dataset: Dataset, spec: worker.LayerSpec) -> np.ndarray | None:
 def globe_thumbnail(
     data: np.ndarray,
     spec: worker.LayerSpec,
-    coastlines: list[list[list[float]]],
     size: int = 96,
 ) -> Image.Image:
     scale = 3
@@ -86,43 +84,6 @@ def globe_thumbnail(
     rgba[..., :3] = rgb
     rgba[..., 3] = np.where(inside & np.isfinite(sampled), 255, 0)
     image = Image.fromarray(rgba, "RGBA")
-    draw = ImageDraw.Draw(image, "RGBA")
-
-    def project(lon_degrees: float, lat_degrees: float) -> tuple[float, float] | None:
-        point_lon = math.radians(lon_degrees)
-        point_lat = math.radians(lat_degrees)
-        delta = point_lon - lon0
-        visible = (
-            math.sin(lat0) * math.sin(point_lat)
-            + math.cos(lat0) * math.cos(point_lat) * math.cos(delta)
-        )
-        if visible <= 0:
-            return None
-        px = math.cos(point_lat) * math.sin(delta)
-        py = (
-            math.cos(lat0) * math.sin(point_lat)
-            - math.sin(lat0) * math.cos(point_lat) * math.cos(delta)
-        )
-        return cx + px * radius, cy - py * radius
-
-    for line in coastlines:
-        segment: list[tuple[float, float]] = []
-        for longitude, latitude in line:
-            point = project(longitude, latitude)
-            if point is None:
-                if len(segment) > 1:
-                    draw.line(segment, fill=(245, 255, 255, 178), width=2 * scale)
-                segment = []
-            else:
-                segment.append(point)
-        if len(segment) > 1:
-            draw.line(segment, fill=(245, 255, 255, 178), width=2 * scale)
-
-    draw.ellipse(
-        (cx - radius, cy - radius, cx + radius, cy + radius),
-        outline=(255, 255, 255, 190),
-        width=2 * scale,
-    )
     return image.resize((size, size), Image.Resampling.LANCZOS)
 
 
@@ -136,26 +97,8 @@ def vertical_gradient(size: int) -> Image.Image:
 
 
 def mark(size: int) -> Image.Image:
-    scale = 4
-    pixels = size * scale
-    image = vertical_gradient(pixels)
-    mask = Image.new("L", (pixels, pixels), 0)
-    ImageDraw.Draw(mask).rounded_rectangle(
-        (0, 0, pixels - 1, pixels - 1),
-        radius=int(pixels * 0.27),
-        fill=255,
-    )
-    image.putalpha(mask)
-    draw = ImageDraw.Draw(image, "RGBA")
-    white = (246, 254, 255, 255)
-    draw.ellipse((pixels * .21, pixels * .41, pixels * .51, pixels * .70), fill=white)
-    draw.ellipse((pixels * .35, pixels * .27, pixels * .70, pixels * .70), fill=white)
-    draw.ellipse((pixels * .58, pixels * .38, pixels * .83, pixels * .70), fill=white)
-    draw.rounded_rectangle((pixels * .22, pixels * .50, pixels * .82, pixels * .70), radius=pixels * .09, fill=white)
-    draw.arc((pixels * .20, pixels * .54, pixels * .82, pixels * .82), 20, 160, fill=(211, 250, 247, 255), width=max(2, int(pixels * .045)))
-    draw.arc((pixels * .31, pixels * .64, pixels * .72, pixels * .88), 20, 160, fill=(180, 241, 235, 255), width=max(2, int(pixels * .032)))
-    draw.ellipse((pixels * .73, pixels * .20, pixels * .80, pixels * .27), fill=(250, 210, 102, 255))
-    return image.resize((size, size), Image.Resampling.LANCZOS)
+    master = Image.open(ROOT / "Assets" / "AISkyIconMaster.png").convert("RGBA")
+    return master.resize((size, size), Image.Resampling.LANCZOS)
 
 
 def app_artwork(output: Path) -> None:
@@ -198,9 +141,6 @@ def main() -> None:
     args = parser.parse_args()
 
     app_artwork(ROOT / "Assets")
-    coastlines = json.loads(
-        (ROOT / "MapHost" / "assets" / "coastlines-110m.json").read_text(encoding="utf-8")
-    )["lines"]
     target = ROOT / "Assets" / "Layers"
     target.mkdir(parents=True, exist_ok=True)
     with Dataset(args.energy) as energy, Dataset(args.sds) as sds:
@@ -210,7 +150,7 @@ def main() -> None:
                 data = read_spec(sds, spec)
             if data is None:
                 continue
-            globe_thumbnail(data, spec, coastlines).save(target / f"{spec.id}.png")
+            globe_thumbnail(data, spec).save(target / f"{spec.id}.png")
             print(spec.id)
 
 

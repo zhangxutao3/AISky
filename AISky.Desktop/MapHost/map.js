@@ -3,9 +3,6 @@ const context = canvas.getContext("2d", { alpha: false, desynchronized: true });
 const windCanvas = document.querySelector("#wind");
 const windContext = windCanvas.getContext("2d", { alpha: true, desynchronized: true });
 const coordinateLabel = document.querySelector("#coordinates");
-const layerLabel = document.querySelector("#layerName");
-const leadLabel = document.querySelector("#leadName");
-const dataStatus = document.querySelector("#dataStatus");
 const pointPanel = document.querySelector("#pointPanel");
 const pointClose = document.querySelector("#pointClose");
 const pointLocation = document.querySelector("#pointLocation");
@@ -50,6 +47,7 @@ let windField = null;
 let windParticles = [];
 let windFrame = 0;
 let windLastFrame = 0;
+let prefetchGeneration = 0;
 
 function clamp(value, minimum, maximum) {
   return Math.max(minimum, Math.min(maximum, value));
@@ -737,6 +735,33 @@ async function loadWindField(run) {
   return field;
 }
 
+function scheduleFramePrefetch(run, layerId) {
+  const generation = ++prefetchGeneration;
+  if (!run) return;
+
+  const prefetch = async () => {
+    if (generation !== prefetchGeneration) return;
+    const layer = run.layers?.find((item) => item.id === layerId) ?? run.layers?.[0];
+    if (!layer) return;
+    try {
+      const field = await loadField(run, layer);
+      if (generation !== prefetchGeneration) return;
+      prepareFieldTexture(field);
+      if (showWindAnimation) {
+        await loadWindField(run);
+      }
+    } catch {
+      // Prefetch is opportunistic; the normal render path reports real failures.
+    }
+  };
+
+  if ("requestIdleCallback" in window) {
+    window.requestIdleCallback(() => void prefetch(), { timeout: 240 });
+  } else {
+    window.setTimeout(() => void prefetch(), 48);
+  }
+}
+
 function resizeWindCanvas() {
   const ratio = Math.min(window.devicePixelRatio || 1, 2);
   const width = Math.max(1, Math.round(windCanvas.clientWidth * ratio));
@@ -863,18 +888,14 @@ async function render() {
     ?? activeRun?.layers?.[0];
   try {
     if (activeRun && layer) {
-      dataStatus.textContent = "正在读取本地栅格";
       const field = await loadField(activeRun, layer);
       if (generation !== renderGeneration) return;
       activeField = field;
       activeLayerId = layer.id;
-      layerLabel.textContent = layer.label;
       drawRealField(width, height, field);
-      dataStatus.textContent = `${activeRun.model} · ${activeRun.version} · 本地 NetCDF`;
     } else {
       activeField = null;
       drawEmptyField(width, height);
-      dataStatus.textContent = "暂无本地预报数据";
     }
     drawGrid(width, height);
     drawCoastlines(width, height);
@@ -886,7 +907,6 @@ async function render() {
     drawGrid(width, height);
     drawCoastlines(width, height);
     drawPointMarker(width, height);
-    dataStatus.textContent = "栅格加载失败";
     void refreshWindAnimation(generation);
     window.chrome?.webview?.postMessage({ type: "map-error", message: String(error.message || error) });
   }
@@ -1010,8 +1030,8 @@ window.chrome?.webview?.addEventListener("message", (event) => {
     forecastSeries = Array.isArray(message.series) ? message.series : [];
     activeLayerId = message.layer || activeRun?.layers?.[0]?.id || "";
     activeLead = Number(activeRun?.leadHours ?? message.lead ?? 0);
-    leadLabel.textContent = activeLead >= 0 ? `+${activeLead}h` : `${activeLead}h`;
     void render().then(() => {
+      scheduleFramePrefetch(message.nextRun, activeLayerId);
       if (pointSelection && !pointPanel.hidden) {
         void showPointDetails(pointSelection.lon, pointSelection.lat);
       }
@@ -1020,8 +1040,10 @@ window.chrome?.webview?.addEventListener("message", (event) => {
     activeRun = message.run || null;
     activeLayerId = message.layer || activeLayerId || activeRun?.layers?.[0]?.id || "";
     activeLead = Number(activeRun?.leadHours ?? 0);
-    leadLabel.textContent = activeLead >= 0 ? `+${activeLead}h` : `${activeLead}h`;
-    void render().then(() => updatePointCurrentReading());
+    void render().then(() => {
+      scheduleFramePrefetch(message.nextRun, activeLayerId);
+      updatePointCurrentReading();
+    });
   } else if (message.type === "set-layer") {
     activeLayerId = String(message.layer || "").toLowerCase();
     void render().then(() => {
@@ -1031,7 +1053,6 @@ window.chrome?.webview?.addEventListener("message", (event) => {
     });
   } else if (message.type === "set-lead") {
     activeLead = Number(message.lead) || 0;
-    leadLabel.textContent = activeLead >= 0 ? `+${activeLead}h` : `${activeLead}h`;
   } else if (message.type === "reset-view") {
     Object.assign(view, worldView);
     void render();
