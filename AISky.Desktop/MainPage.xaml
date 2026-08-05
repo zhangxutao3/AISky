@@ -41,7 +41,6 @@
                     <VisualState.Setters>
                         <Setter Target="RunPickerBorder.Visibility" Value="Visible" />
                         <Setter Target="CompactRunButton.Visibility" Value="Collapsed" />
-                        <Setter Target="ComparePicker.Visibility" Value="Collapsed" />
                         <Setter Target="UpdateStatus.Visibility" Value="Collapsed" />
                         <Setter Target="LayerPanel.Width" Value="208" />
                         <Setter Target="LayerPanel.MaxHeight" Value="480" />
@@ -64,7 +63,6 @@
                     <VisualState.Setters>
                         <Setter Target="RunPickerBorder.Visibility" Value="Visible" />
                         <Setter Target="CompactRunButton.Visibility" Value="Collapsed" />
-                        <Setter Target="ComparePicker.Visibility" Value="Visible" />
                         <Setter Target="UpdateStatus.Visibility" Value="Visible" />
                         <Setter Target="LayerPanel.Width" Value="224" />
                         <Setter Target="LayerPanel.MaxHeight" Value="560" />
@@ -221,16 +219,15 @@
             <Border
                 x:Name="RunPickerBorder"
                 Grid.Column="1"
-                MaxWidth="920"
+                MaxWidth="760"
                 Padding="12,8,12,10"
                 HorizontalAlignment="Center"
                 Style="{StaticResource AISkyFloatingPanelStyle}">
                 <Grid ColumnSpacing="8">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="1.12*" />
-                        <ColumnDefinition Width="1.24*" />
-                        <ColumnDefinition Width="1.34*" />
-                        <ColumnDefinition Width="1.08*" />
+                        <ColumnDefinition Width="1.05*" />
+                        <ColumnDefinition Width="1.18*" />
+                        <ColumnDefinition Width="1.28*" />
                     </Grid.ColumnDefinitions>
                     <ComboBox
                         x:Name="ModelPicker"
@@ -260,17 +257,6 @@
                         Header="预报（UTC）"
                         SelectionChanged="ForecastPicker_SelectionChanged"
                         Style="{StaticResource AISkyCompactComboBoxStyle}" />
-                    <ComboBox
-                        x:Name="ComparePicker"
-                        Grid.Column="3"
-                        MinWidth="142"
-                        AutomationProperties.Name="模型对比"
-                        Header="模型对比"
-                        SelectedIndex="0"
-                        Style="{StaticResource AISkyCompactComboBoxStyle}">
-                        <ComboBoxItem Content="关闭对比" />
-                        <ComboBoxItem Content="AISky-SDS" />
-                    </ComboBox>
                 </Grid>
             </Border>
 
