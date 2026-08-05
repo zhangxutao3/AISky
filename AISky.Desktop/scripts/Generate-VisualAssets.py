@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 from netCDF4 import Dataset
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "DataWorker"))
@@ -87,6 +87,22 @@ def globe_thumbnail(
     return image.resize((size, size), Image.Resampling.LANCZOS)
 
 
+def simplify_legacy_thumbnail(path: Path, size: int = 96) -> None:
+    """Keep the broad field pattern while removing legacy line overlays."""
+    image = Image.open(path).convert("RGBA")
+    image = image.resize((18, 18), Image.Resampling.LANCZOS)
+    image = image.filter(ImageFilter.GaussianBlur(radius=0.75))
+    image = image.resize((size, size), Image.Resampling.BICUBIC)
+    mask = Image.new("L", (size, size), 0)
+    padding = round(size * 0.05)
+    ImageDraw.Draw(mask).ellipse(
+        (padding, padding, size - padding - 1, size - padding - 1),
+        fill=255,
+    )
+    image.putalpha(mask)
+    image.save(path)
+
+
 def vertical_gradient(size: int) -> Image.Image:
     top = np.array(color("#56D7D0"), dtype=np.float32)
     bottom = np.array(color("#126F91"), dtype=np.float32)
@@ -143,6 +159,7 @@ def main() -> None:
     app_artwork(ROOT / "Assets")
     target = ROOT / "Assets" / "Layers"
     target.mkdir(parents=True, exist_ok=True)
+    generated: set[str] = set()
     with Dataset(args.energy) as energy, Dataset(args.sds) as sds:
         for spec in worker.COMMON_LAYERS:
             data = read_spec(energy, spec)
@@ -151,7 +168,12 @@ def main() -> None:
             if data is None:
                 continue
             globe_thumbnail(data, spec).save(target / f"{spec.id}.png")
+            generated.add(spec.id)
             print(spec.id)
+    for path in target.glob("*.png"):
+        if path.stem not in generated:
+            simplify_legacy_thumbnail(path)
+            print(f"{path.stem} (simplified)")
 
 
 if __name__ == "__main__":

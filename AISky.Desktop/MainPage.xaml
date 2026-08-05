@@ -27,6 +27,20 @@
             <Setter Property="BorderBrush" Value="#D9FFFFFF" />
             <Setter Property="BorderThickness" Value="2" />
         </Style>
+        <Style x:Key="CompactTopAppBarButtonStyle" TargetType="AppBarButton">
+            <Setter Property="Width" Value="40" />
+            <Setter Property="MinWidth" Value="40" />
+            <Setter Property="Height" Value="48" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="CompactTopAppBarToggleButtonStyle" TargetType="AppBarToggleButton">
+            <Setter Property="Width" Value="40" />
+            <Setter Property="MinWidth" Value="40" />
+            <Setter Property="Height" Value="48" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
     </Page.Resources>
 
     <!-- Visual direction: airy cloud-white controls, slate typography, and restrained mint/sky iridescence over a map-first canvas. -->
@@ -59,6 +73,7 @@
                     </VisualState.StateTriggers>
                     <VisualState.Setters>
                         <Setter Target="RunPickerBorder.Visibility" Value="Visible" />
+                        <Setter Target="RunPickerBorder.Width" Value="560" />
                         <Setter Target="CompactRunButton.Visibility" Value="Collapsed" />
                         <Setter Target="BrandLockup.Visibility" Value="Collapsed" />
                         <Setter Target="UpdateStatus.Visibility" Value="Collapsed" />
@@ -79,6 +94,7 @@
                     </VisualState.StateTriggers>
                     <VisualState.Setters>
                         <Setter Target="RunPickerBorder.Visibility" Value="Visible" />
+                        <Setter Target="RunPickerBorder.Width" Value="650" />
                         <Setter Target="CompactRunButton.Visibility" Value="Collapsed" />
                         <Setter Target="BrandLockup.Visibility" Value="Visible" />
                         <Setter Target="UpdateStatus.Visibility" Value="Visible" />
@@ -135,33 +151,28 @@
         <Grid
             x:Name="TopChrome"
             Margin="44,20,18,0"
-            VerticalAlignment="Top"
-            ColumnSpacing="10">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
+            VerticalAlignment="Top">
 
             <Border
                 x:Name="CommandSurface"
-                Grid.Column="0"
                 Height="58"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Top"
                 Style="{StaticResource AISkyFloatingPanelStyle}">
-                <Grid ColumnSpacing="4">
+                <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <StackPanel
                         x:Name="BrandLockup"
-                        Margin="12,5,5,5"
+                        Margin="10,5,3,5"
                         VerticalAlignment="Center"
                         Orientation="Horizontal"
-                        Spacing="8">
+                        Spacing="6">
                         <Image
-                            Width="36"
-                            Height="36"
+                            Width="32"
+                            Height="32"
                             Source="ms-appx:///Assets/Square44x44Logo.scale-200.png"
                             Stretch="Uniform" />
                         <StackPanel VerticalAlignment="Center" Spacing="-2">
@@ -177,6 +188,10 @@
                     </StackPanel>
                     <CommandBar
                         Grid.Column="1"
+                        Height="48"
+                        Margin="0"
+                        Padding="0"
+                        VerticalAlignment="Center"
                         Background="Transparent"
                         ClosedDisplayMode="Compact"
                         DefaultLabelPosition="Collapsed"
@@ -186,30 +201,33 @@
                         Click="RefreshButton_Click"
                         Icon="Refresh"
                         Label="刷新"
+                        Style="{StaticResource CompactTopAppBarButtonStyle}"
                         ToolTipService.ToolTip="刷新本地索引" />
                     <AppBarButton
                         AutomationProperties.Name="打开补数下载"
                         Click="DownloadButton_Click"
                         Icon="Download"
                         Label="补数"
+                        Style="{StaticResource CompactTopAppBarButtonStyle}"
                         ToolTipService.ToolTip="补数下载" />
                     <AppBarToggleButton
                         x:Name="AutoSyncButton"
                         AutomationProperties.Name="切换自动同步"
                         Checked="AutoSyncButton_Changed"
                         Label="自动同步"
+                        Style="{StaticResource CompactTopAppBarToggleButtonStyle}"
                         ToolTipService.ToolTip="每 3 小时自动检查最新起报"
                         Unchecked="AutoSyncButton_Changed">
                         <AppBarToggleButton.Icon>
                             <FontIcon Glyph="&#xE895;" />
                         </AppBarToggleButton.Icon>
                     </AppBarToggleButton>
-                    <AppBarSeparator />
                     <AppBarButton
                         AutomationProperties.Name="恢复全球视图"
                         Click="GlobeButton_Click"
                         Icon="Globe"
                         Label="全球"
+                        Style="{StaticResource CompactTopAppBarButtonStyle}"
                         ToolTipService.ToolTip="恢复全球视图" />
                         <CommandBar.SecondaryCommands>
                         <AppBarButton
@@ -233,6 +251,15 @@
                             Click="ImportButton_Click"
                             Icon="OpenFile"
                             Label="导入本地 NetCDF" />
+                        <AppBarButton
+                            x:Name="TimeZoneButton"
+                            AutomationProperties.Name="选择软件显示时区"
+                            Click="TimeZoneButton_Click"
+                            Label="显示时区 · UTC">
+                            <AppBarButton.Icon>
+                                <FontIcon Glyph="&#xE823;" />
+                            </AppBarButton.Icon>
+                        </AppBarButton>
                         <AppBarToggleButton
                             x:Name="DarkThemeToggle"
                             AutomationProperties.Name="切换深色界面"
@@ -254,10 +281,10 @@
 
             <Button
                 x:Name="CompactRunButton"
-                Grid.Column="1"
                 Height="58"
                 Padding="18,0"
                 HorizontalAlignment="Center"
+                VerticalAlignment="Top"
                 AutomationProperties.Name="切换模型"
                 Click="CompactRunButton_Click"
                 Content="AISky-Energy · +3h"
@@ -266,11 +293,11 @@
 
             <Border
                 x:Name="RunPickerBorder"
-                Grid.Column="1"
-                MaxWidth="760"
+                Width="650"
                 Height="58"
                 Padding="10,8"
                 HorizontalAlignment="Center"
+                VerticalAlignment="Top"
                 Style="{StaticResource AISkyFloatingPanelStyle}">
                 <Grid ColumnSpacing="8">
                     <Grid.ColumnDefinitions>
@@ -294,27 +321,27 @@
                         x:Name="InitPicker"
                         Grid.Column="1"
                         MinWidth="164"
-                        AutomationProperties.Name="起报时间 UTC"
+                        AutomationProperties.Name="起报时间"
                         SelectionChanged="InitPicker_SelectionChanged"
                         Style="{StaticResource AISkyCompactComboBoxStyle}"
-                        ToolTipService.ToolTip="起报时间（UTC）" />
+                        ToolTipService.ToolTip="起报时间（当前显示时区）" />
                     <ComboBox
                         x:Name="ForecastPicker"
                         Grid.Column="2"
                         MinWidth="176"
-                        AutomationProperties.Name="预报时效 UTC"
+                        AutomationProperties.Name="预报时效"
                         SelectionChanged="ForecastPicker_SelectionChanged"
                         Style="{StaticResource AISkyCompactComboBoxStyle}"
-                        ToolTipService.ToolTip="预报时效（UTC）" />
+                        ToolTipService.ToolTip="预报时效（当前显示时区）" />
                 </Grid>
             </Border>
 
             <Border
                 x:Name="UpdateStatus"
-                Grid.Column="2"
                 Width="{Binding ActualWidth, ElementName=RightRail}"
                 Height="58"
                 Padding="12,6"
+                HorizontalAlignment="Right"
                 VerticalAlignment="Top"
                 Style="{StaticResource AISkyFloatingPanelStyle}">
                 <Grid ColumnSpacing="10">
@@ -589,7 +616,7 @@
                             x:Name="ForecastTimeText"
                             Grid.Column="1"
                             Style="{StaticResource BodyStrongTextBlockStyle}"
-                            Text="08-03 16:30 · +3h UTC" />
+                            Text="等待预报时次" />
                         <TextBlock
                             x:Name="LastForecastText"
                             Grid.Column="2"
@@ -601,7 +628,7 @@
                     <ScrollViewer
                         Grid.Row="1"
                         Height="58"
-                        Padding="0,0,0,14"
+                        Padding="0,0,0,8"
                         AutomationProperties.Name="按日期分组的预报时间轴"
                         HorizontalScrollBarVisibility="Auto"
                         HorizontalScrollMode="Enabled"
@@ -610,6 +637,7 @@
                         ZoomMode="Disabled">
                         <StackPanel
                             x:Name="TimelineDaysHost"
+                            Margin="0,6,0,0"
                             Orientation="Horizontal"
                             Spacing="8" />
                     </ScrollViewer>
@@ -706,7 +734,7 @@
                                     <TextBlock
                                         Foreground="{StaticResource AISkyDarkMutedTextBrush}"
                                         Style="{StaticResource CaptionTextBlockStyle}"
-                                        Text="所有起报与预报时间均使用 UTC" />
+                                        Text="默认使用 UTC，可在左上角“…”中切换显示时区" />
                                 </StackPanel>
                             </Grid>
                         </Border>

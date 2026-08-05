@@ -25,6 +25,10 @@ const textureBounds = { ...worldView };
 const fieldCache = new Map();
 const sampleCache = new Map();
 let coastlines = [];
+let countryBorders = [];
+let provinceBorders = [];
+let rivers = [];
+let lakes = [];
 let places = [];
 let activeRun = null;
 let forecastSeries = [];
@@ -43,6 +47,7 @@ let fieldOpacity = 0.93;
 let showGrid = true;
 let showPlaces = true;
 let showWindAnimation = true;
+let displayUtcOffsetHours = 0;
 let windField = null;
 let windParticles = [];
 let windFrame = 0;
@@ -212,7 +217,25 @@ function formatValue(value, digits = 2) {
 
 function formatForecastKey(key) {
   const match = String(key || "").match(/^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})$/);
-  return match ? `${match[2]}-${match[3]} ${match[4]}:${match[5]}` : String(key || "--");
+  if (!match) return String(key || "--");
+  const utc = Date.UTC(
+    Number(match[1]),
+    Number(match[2]) - 1,
+    Number(match[3]),
+    Number(match[4]),
+    Number(match[5]),
+  );
+  const value = new Date(utc + displayUtcOffsetHours * 3600000);
+  const month = String(value.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(value.getUTCDate()).padStart(2, "0");
+  const hour = String(value.getUTCHours()).padStart(2, "0");
+  const minute = String(value.getUTCMinutes()).padStart(2, "0");
+  return `${month}-${day} ${hour}:${minute}`;
+}
+
+function displayTimeZoneLabel() {
+  if (displayUtcOffsetHours === 0) return "UTC";
+  return `UTC${displayUtcOffsetHours > 0 ? "+" : ""}${displayUtcOffsetHours}`;
 }
 
 async function loadSample(layer) {
@@ -372,7 +395,7 @@ function updatePointCurrentReading() {
   pointValue.textContent = formatValue(current);
   pointUnit.textContent = layer?.unit || "";
   pointValidTime.textContent = activeRun
-    ? `${formatForecastKey(activeRun.forecastKey)} UTC · ${activeRun.model} · ${activeLead >= 0 ? "+" : ""}${activeLead}h`
+    ? `${formatForecastKey(activeRun.forecastKey)} ${displayTimeZoneLabel()} · ${activeRun.model} · ${activeLead >= 0 ? "+" : ""}${activeLead}h`
     : "暂无本地预报数据";
   drawPointChart(pointSeriesData);
 }
@@ -391,7 +414,7 @@ async function showPointDetails(lon, lat) {
   pointValue.textContent = formatValue(current);
   pointUnit.textContent = layer?.unit || "";
   pointValidTime.textContent = activeRun
-    ? `${formatForecastKey(activeRun.forecastKey)} UTC · ${activeRun.model} · ${activeLead >= 0 ? "+" : ""}${activeLead}h`
+    ? `${formatForecastKey(activeRun.forecastKey)} ${displayTimeZoneLabel()} · ${activeRun.model} · ${activeLead >= 0 ? "+" : ""}${activeLead}h`
     : "暂无本地预报数据";
   pointRange.textContent = "同一起报多时次预报";
   pointCount.textContent = "--";
@@ -587,7 +610,69 @@ function drawGrid(width, height) {
   context.restore();
 }
 
+function traceWrappedLine(line, width, height, longitudeOffset) {
+  let started = false;
+  context.beginPath();
+  for (const point of line) {
+    const [x, y] = project(point[0] + longitudeOffset, point[1], width, height);
+    if (!started) {
+      context.moveTo(x, y);
+      started = true;
+    } else {
+      context.lineTo(x, y);
+    }
+  }
+}
+
+function drawWrappedLines(lines, width, height, firstCopy, lastCopy) {
+  for (let copy = firstCopy; copy <= lastCopy; copy += 1) {
+    const longitudeOffset = copy * 360;
+    for (const line of lines) {
+      traceWrappedLine(line, width, height, longitudeOffset);
+      context.stroke();
+    }
+  }
+}
+
+function drawHydrology(width, height, firstCopy, lastCopy) {
+  const longitudeSpan = view.right - view.left;
+  if (longitudeSpan > 240) return;
+
+  context.save();
+  context.lineJoin = "round";
+  context.lineCap = "round";
+  context.fillStyle = mapTheme === "dark"
+    ? "rgba(91, 185, 207, 0.22)"
+    : "rgba(119, 207, 224, 0.28)";
+  context.strokeStyle = mapTheme === "dark"
+    ? "rgba(132, 211, 229, 0.58)"
+    : "rgba(35, 125, 157, 0.46)";
+  context.lineWidth = 0.8 * window.devicePixelRatio;
+  for (let copy = firstCopy; copy <= lastCopy; copy += 1) {
+    const longitudeOffset = copy * 360;
+    for (const polygon of lakes) {
+      traceWrappedLine(polygon, width, height, longitudeOffset);
+      context.closePath();
+      context.fill();
+      context.stroke();
+    }
+  }
+  if (longitudeSpan <= 180) {
+    context.strokeStyle = mapTheme === "dark"
+      ? "rgba(133, 214, 231, 0.62)"
+      : "rgba(35, 126, 158, 0.52)";
+    context.lineWidth = 0.72 * window.devicePixelRatio;
+    drawWrappedLines(rivers, width, height, firstCopy, lastCopy);
+  }
+  context.restore();
+}
+
 function drawCoastlines(width, height) {
+  const firstCopy = Math.floor((view.left + 180) / 360) - 1;
+  const lastCopy = Math.floor((view.right + 180) / 360) + 1;
+  const longitudeSpan = view.right - view.left;
+  drawHydrology(width, height, firstCopy, lastCopy);
+
   context.save();
   context.strokeStyle = mapTheme === "dark"
     ? "rgba(216, 237, 240, 0.74)"
@@ -595,24 +680,22 @@ function drawCoastlines(width, height) {
   context.lineWidth = 1.1 * window.devicePixelRatio;
   context.lineJoin = "round";
   context.lineCap = "round";
-  const firstCopy = Math.floor((view.left + 180) / 360) - 1;
-  const lastCopy = Math.floor((view.right + 180) / 360) + 1;
-  for (let copy = firstCopy; copy <= lastCopy; copy += 1) {
-    const longitudeOffset = copy * 360;
-    for (const line of coastlines) {
-      let started = false;
-      context.beginPath();
-      for (const point of line) {
-        const [x, y] = project(point[0] + longitudeOffset, point[1], width, height);
-        if (!started) {
-          context.moveTo(x, y);
-          started = true;
-        } else {
-          context.lineTo(x, y);
-        }
-      }
-      context.stroke();
-    }
+  drawWrappedLines(coastlines, width, height, firstCopy, lastCopy);
+
+  context.strokeStyle = mapTheme === "dark"
+    ? "rgba(218, 237, 240, 0.58)"
+    : "rgba(18, 58, 68, 0.62)";
+  context.lineWidth = (longitudeSpan > 240 ? 0.58 : 0.82) * window.devicePixelRatio;
+  drawWrappedLines(countryBorders, width, height, firstCopy, lastCopy);
+
+  if (longitudeSpan <= 110) {
+    context.strokeStyle = mapTheme === "dark"
+      ? "rgba(197, 228, 233, 0.42)"
+      : "rgba(30, 75, 84, 0.42)";
+    context.lineWidth = 0.62 * window.devicePixelRatio;
+    context.setLineDash([2.2 * window.devicePixelRatio, 2.8 * window.devicePixelRatio]);
+    drawWrappedLines(provinceBorders, width, height, firstCopy, lastCopy);
+    context.setLineDash([]);
   }
 
   context.fillStyle = mapTheme === "dark"
@@ -630,7 +713,6 @@ function drawCoastlines(width, height) {
     return;
   }
   const occupied = [];
-  const longitudeSpan = view.right - view.left;
   const rankLimit = longitudeSpan > 90 ? 1 : 2;
   const candidates = places
     .flatMap((item) => {
@@ -922,11 +1004,26 @@ function requestRender() {
 }
 
 async function loadAssets() {
-  const [coastResponse, placesResponse] = await Promise.all([
+  const [
+    coastResponse,
+    countryResponse,
+    provinceResponse,
+    riverResponse,
+    lakeResponse,
+    placesResponse,
+  ] = await Promise.all([
     fetch("./assets/coastlines-110m.json"),
+    fetch("./assets/countries-110m.json"),
+    fetch("./assets/china-provinces-50m.json"),
+    fetch("./assets/rivers-50m.json"),
+    fetch("./assets/lakes-50m.json"),
     fetch("./assets/places-50m.json"),
   ]);
   coastlines = (await coastResponse.json()).lines || [];
+  countryBorders = (await countryResponse.json()).lines || [];
+  provinceBorders = (await provinceResponse.json()).lines || [];
+  rivers = (await riverResponse.json()).lines || [];
+  lakes = (await lakeResponse.json()).polygons || [];
   places = (await placesResponse.json()).places || [];
 }
 
@@ -1065,7 +1162,9 @@ window.chrome?.webview?.addEventListener("message", (event) => {
     showGrid = message.showGrid !== false;
     showPlaces = message.showPlaces !== false;
     showWindAnimation = message.windAnimation !== false;
+    displayUtcOffsetHours = Math.max(-12, Math.min(14, Number(message.utcOffsetHours) || 0));
     void render();
+    updatePointCurrentReading();
   }
 });
 

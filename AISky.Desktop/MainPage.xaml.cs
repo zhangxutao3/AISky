@@ -31,6 +31,7 @@ public sealed partial class MainPage : Page
     private bool _isPlaying;
     private bool _firstRunBusy;
     private int _currentForecastIndex;
+    private int _displayUtcOffsetHours;
     private string? _lastLayerSetKey;
     private string? _lastMapSeriesKey;
     private readonly List<Button> _timelineSlotButtons = [];
@@ -49,6 +50,11 @@ public sealed partial class MainPage : Page
         try
         {
             await App.Services.InitializeAsync();
+            _displayUtcOffsetHours = Math.Clamp(
+                App.Services.CurrentSettings.DisplayUtcOffsetHours,
+                -12,
+                14);
+            TimeZoneButton.Label = $"显示时区 · {DisplayTimeZoneLabel}";
             AttachBackgroundEvents();
             _suppressAutoSync = true;
             AutoSyncButton.IsChecked = App.Services.CurrentSettings.AutoSyncEnabled;
@@ -566,6 +572,73 @@ public sealed partial class MainPage : Page
     private void GlobeButton_Click(object sender, RoutedEventArgs e) =>
         PostMapMessage(new { type = "reset-view" });
 
+    private async void TimeZoneButton_Click(object sender, RoutedEventArgs e)
+    {
+        var selector = new ComboBox
+        {
+            Header = "软件显示时区",
+            MinWidth = 320,
+        };
+        for (var offset = -12; offset <= 14; offset++)
+        {
+            var zone = offset == 0 ? "UTC" : $"UTC{offset:+#;-#}";
+            var note = offset switch
+            {
+                0 => "（默认）",
+                8 => "（中国标准时间）",
+                _ => "",
+            };
+            selector.Items.Add(new ComboBoxItem
+            {
+                Content = $"{zone} {note}".TrimEnd(),
+                Tag = offset,
+            });
+        }
+        selector.SelectedIndex = _displayUtcOffsetHours + 12;
+
+        var content = new StackPanel
+        {
+            Spacing = 10,
+        };
+        content.Children.Add(selector);
+        content.Children.Add(new TextBlock
+        {
+            Text = "起报、预报、时间轴与格点序列会统一使用所选时区；原始数据仍按 UTC 保存。",
+            TextWrapping = TextWrapping.Wrap,
+            Opacity = 0.72,
+        });
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "显示时区",
+            Content = content,
+            PrimaryButtonText = "应用",
+            CloseButtonText = "取消",
+            DefaultButton = ContentDialogButton.Primary,
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary
+            || selector.SelectedItem is not ComboBoxItem { Tag: int offsetHours })
+        {
+            return;
+        }
+
+        var selectedRunId = _selectedRun?.Id;
+        var selectedModel = GetSelectedModel();
+        var selectedInit = _selectedRun?.InitKey;
+        _displayUtcOffsetHours = offsetHours;
+        await App.Services.UpdateSettingsAsync(
+            App.Services.CurrentSettings with { DisplayUtcOffsetHours = offsetHours });
+        TimeZoneButton.Label = $"显示时区 · {DisplayTimeZoneLabel}";
+        ApplyIndex(_index, selectedModel, selectedInit);
+        var selectedRun = _currentForecastRuns.FirstOrDefault(run => run.Id == selectedRunId);
+        if (selectedRun is not null)
+        {
+            SelectRun(selectedRun, updateForecastPicker: true);
+        }
+        SendDisplayOptionsToMap();
+        ServiceStatusText.Text = $"显示时间已切换为 {DisplayTimeZoneLabel}";
+    }
+
     private async void FillSeriesButton_Click(object sender, RoutedEventArgs e)
     {
         if (_selectedRun is null)
@@ -796,7 +869,7 @@ public sealed partial class MainPage : Page
             {
                 InitPicker.Items.Add(new ComboBoxItem
                 {
-                    Content = FormatUtcKey(key, "yyyy-MM-dd HH:mm"),
+                    Content = FormatTimeKey(key, "yyyy-MM-dd HH:mm"),
                     Tag = key,
                 });
             }
@@ -829,7 +902,7 @@ public sealed partial class MainPage : Page
             {
                 ForecastPicker.Items.Add(new ComboBoxItem
                 {
-                    Content = $"{FormatLead(run.LeadHours)} · {FormatUtcKey(run.ForecastKey, "MM-dd HH:mm")}",
+                    Content = $"{FormatLead(run.LeadHours)} · {FormatTimeKey(run.ForecastKey, "MM-dd HH:mm")}",
                     Tag = run,
                 });
             }
@@ -869,7 +942,7 @@ public sealed partial class MainPage : Page
             };
             dayPanel.Children.Add(new TextBlock
             {
-                Text = $"第 {dayGroup.Key + 1} 组 · {FormatUtcKey(dayGroup.First().Run.ForecastKey, "MM-dd")}",
+                Text = $"第 {dayGroup.Key + 1} 组 · {FormatTimeKey(dayGroup.First().Run.ForecastKey, "MM-dd")}",
                 FontSize = 10,
                 Opacity = 0.72,
             });
@@ -881,7 +954,7 @@ public sealed partial class MainPage : Page
             };
             foreach (var item in dayGroup)
             {
-                var hour = FormatUtcKey(item.Run.ForecastKey, "HH");
+                var hour = FormatTimeKey(item.Run.ForecastKey, "HH");
                 var button = new Button
                 {
                     Tag = item.Index,
@@ -893,10 +966,10 @@ public sealed partial class MainPage : Page
                 button.Click += TimelineSlot_Click;
                 ToolTipService.SetToolTip(
                     button,
-                    $"{FormatUtcKey(item.Run.ForecastKey, "MM-dd HH:mm")} UTC · {FormatLead(item.Run.LeadHours)}");
+                    $"{FormatTimeKey(item.Run.ForecastKey, "MM-dd HH:mm")} {DisplayTimeZoneLabel} · {FormatLead(item.Run.LeadHours)}");
                 Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
                     button,
-                    $"选择 {FormatUtcKey(item.Run.ForecastKey, "MM-dd HH:mm")} UTC");
+                    $"选择 {FormatTimeKey(item.Run.ForecastKey, "MM-dd HH:mm")} {DisplayTimeZoneLabel}");
                 slots.Children.Add(button);
                 _timelineSlotButtons.Add(button);
             }
@@ -985,16 +1058,16 @@ public sealed partial class MainPage : Page
             ? Visibility.Visible
             : Visibility.Collapsed;
         ForecastTimeText.Text =
-            $"{FormatUtcKey(run.ForecastKey, "MM-dd HH:mm")} · {FormatLead(run.LeadHours)} UTC";
+            $"{FormatTimeKey(run.ForecastKey, "MM-dd HH:mm")} · {FormatLead(run.LeadHours)} {DisplayTimeZoneLabel}";
         FirstForecastText.Text = _currentForecastRuns.Count == 0
             ? "--"
-            : FormatUtcKey(_currentForecastRuns[0].ForecastKey, "MM-dd HH:mm");
+            : FormatTimeKey(_currentForecastRuns[0].ForecastKey, "MM-dd HH:mm");
         LastForecastText.Text = _currentForecastRuns.Count == 0
             ? "--"
-            : FormatUtcKey(_currentForecastRuns[^1].ForecastKey, "MM-dd HH:mm");
+            : FormatTimeKey(_currentForecastRuns[^1].ForecastKey, "MM-dd HH:mm");
         CompactRunButton.Content = $"{run.Model} · {FormatLead(run.LeadHours)}";
         ServiceStatusText.Text =
-            $"{run.Model} · 起报 {FormatUtcKey(run.InitKey, "MM-dd HH:mm")} UTC · {run.Version}";
+            $"{run.Model} · 起报 {FormatTimeKey(run.InitKey, "MM-dd HH:mm")} {DisplayTimeZoneLabel} · {run.Version}";
         UpdateProductContext();
         SendSelectedRunToMap();
     }
@@ -1016,7 +1089,7 @@ public sealed partial class MainPage : Page
             $"{_selectedRun.Model} · {FormatLead(_selectedRun.LeadHours)}";
         ToolTipService.SetToolTip(
             UpdateStatus,
-            $"{code} {layer?.Name} · {_selectedRun.Model} · 起报 {FormatUtcKey(_selectedRun.InitKey, "MM-dd HH:mm")} UTC");
+            $"{code} {layer?.Name} · {_selectedRun.Model} · 起报 {FormatTimeKey(_selectedRun.InitKey, "MM-dd HH:mm")} {DisplayTimeZoneLabel}");
     }
 
     private void SendSelectedRunToMap(bool forceFull = false)
@@ -1162,6 +1235,7 @@ public sealed partial class MainPage : Page
             showGrid = settings.ShowMapGrid,
             showPlaces = settings.ShowMapPlaces,
             windAnimation = settings.ShowWindAnimation,
+            utcOffsetHours = _displayUtcOffsetHours,
         });
     }
 
@@ -1222,15 +1296,21 @@ public sealed partial class MainPage : Page
     private static double[] GridExtent(IReadOnlyList<double> values) =>
         values.Count == 0 ? [] : [values[0], values[^1]];
 
-    private static string FormatUtcKey(string key, string format) =>
+    private string FormatTimeKey(string key, string format) =>
         DateTimeOffset.TryParseExact(
             key,
             "yyyyMMdd_HHmm",
             CultureInfo.InvariantCulture,
             DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
             out var value)
-            ? value.ToString(format, CultureInfo.InvariantCulture)
+            ? value.ToOffset(TimeSpan.FromHours(_displayUtcOffsetHours))
+                .ToString(format, CultureInfo.InvariantCulture)
             : key;
+
+    private string DisplayTimeZoneLabel =>
+        _displayUtcOffsetHours == 0
+            ? "UTC"
+            : $"UTC{_displayUtcOffsetHours:+#;-#}";
 
     private static string FormatLead(int leadHours) =>
         leadHours >= 0 ? $"+{leadHours}h" : $"{leadHours}h";
