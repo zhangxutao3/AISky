@@ -842,41 +842,40 @@
                                     <GradientStop Offset="1" Color="#B70B4551" />
                                 </LinearGradientBrush>
                             </Grid.Background>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="*" />
-                            </Grid.RowDefinitions>
-
-                            <Border
-                                Width="112"
-                                Height="112"
-                                HorizontalAlignment="Left"
-                                Background="White"
-                                CornerRadius="28">
-                                <Image
-                                    Margin="4"
-                                    AutomationProperties.Name="AISky 标志"
-                                    Source="ms-appx:///Assets/AppIcon.png"
-                                    Stretch="Uniform" />
-                            </Border>
-
                             <StackPanel
-                                Grid.Row="1"
+                                Width="250"
+                                HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
-                                Spacing="8">
-                                <StackPanel Spacing="7">
+                                Spacing="14">
+                                <Border
+                                    Width="112"
+                                    Height="112"
+                                    HorizontalAlignment="Center"
+                                    Background="White"
+                                    CornerRadius="28">
+                                    <Image
+                                        Margin="4"
+                                        AutomationProperties.Name="AISky 标志"
+                                        Source="ms-appx:///Assets/AppIcon.png"
+                                        Stretch="Uniform" />
+                                </Border>
+                                <StackPanel
+                                    HorizontalAlignment="Center"
+                                    Spacing="6">
                                     <TextBlock
+                                        HorizontalAlignment="Center"
                                         Foreground="White"
                                         FontSize="46"
                                         FontWeight="SemiBold"
-                                        Text="AISky" />
+                                        Text="AISky"
+                                        TextAlignment="Center" />
                                     <TextBlock
-                                        MaxWidth="330"
+                                        HorizontalAlignment="Center"
                                         Foreground="{StaticResource AISkyDarkMutedTextBrush}"
                                         FontSize="17"
                                         LineHeight="26"
                                         Text="智慧气象桌面平台"
-                                        TextWrapping="Wrap" />
+                                        TextAlignment="Center" />
                                 </StackPanel>
                             </StackPanel>
                         </Grid>
@@ -888,12 +887,14 @@
                             <StackPanel Spacing="16">
                                 <StackPanel
                                     x:Name="FirstRunCompactBrand"
+                                    HorizontalAlignment="Left"
                                     Orientation="Horizontal"
                                     Spacing="10"
                                     Visibility="Collapsed">
                                     <Border
                                         Width="42"
                                         Height="42"
+                                        VerticalAlignment="Center"
                                         Background="White"
                                         CornerRadius="12">
                                         <Image
