@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="map.css">
 </head>
 <body>
-  <canvas id="map" aria-label="AISky 本地气象地图"></canvas>
+  <canvas id="map" tabindex="0" aria-label="AISky 本地气象地图，拖动平移，滚轮缩放，点击查看格点预报"></canvas>
   <div class="map-context">
     <div class="model-badge">
       <span class="dot"></span>
@@ -17,6 +17,37 @@
     <div class="data-status" id="dataStatus">正在准备本地数据</div>
   </div>
   <div class="coordinates" id="coordinates">经度 --　纬度 --</div>
+  <section class="point-panel" id="pointPanel" aria-label="格点预报详情" hidden>
+    <div class="point-panel__header">
+      <div class="point-panel__heading">
+        <div class="point-location" id="pointLocation">经度 -- · 纬度 --</div>
+        <h2 id="pointLayerName">格点预报</h2>
+      </div>
+      <button class="point-close" id="pointClose" type="button" aria-label="关闭格点预报详情">
+        <span aria-hidden="true"></span>
+      </button>
+    </div>
+    <div class="point-reading">
+      <strong id="pointValue">--</strong>
+      <span id="pointUnit"></span>
+      <div id="pointValidTime">请选择地图中的格点</div>
+    </div>
+    <div class="point-chart__summary">
+      <span id="pointRange">同一起报预报序列</span>
+      <span id="pointCount">--</span>
+    </div>
+    <div class="point-chart">
+      <canvas id="pointChart" aria-label="该格点的多时次预报曲线"></canvas>
+      <div class="point-chart__empty" id="pointChartEmpty">正在读取本地预报序列</div>
+    </div>
+    <div class="point-chart__axis" aria-hidden="true">
+      <span id="pointFirstTime">--</span>
+      <span id="pointLastTime">--</span>
+    </div>
+    <div class="point-status" id="pointStatus" role="status" aria-live="polite">
+      点击地图可查看格点的多时次变化
+    </div>
+  </section>
   <script src="map.js"></script>
 </body>
 </html>

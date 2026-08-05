@@ -5,7 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    Title="后台与缓存"
+    Title="应用设置"
     PrimaryButtonText="保存设置"
     CloseButtonText="取消"
     DefaultButton="Primary"
@@ -40,15 +40,48 @@
                     <StackPanel Grid.Column="1" Spacing="3">
                         <TextBlock
                             Style="{StaticResource BodyStrongTextBlockStyle}"
-                            Text="让数据在后台保持新鲜" />
+                            Text="调整地图与后台行为" />
                         <TextBlock
                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                             Style="{StaticResource CaptionTextBlockStyle}"
-                            Text="同步失败不会中断应用，详细原因会写入本地日志。"
+                            Text="显示选项会立即应用；后台任务失败不会中断地图浏览。"
                             TextWrapping="Wrap" />
                     </StackPanel>
                 </Grid>
             </Border>
+
+            <StackPanel Spacing="12">
+                <TextBlock
+                    Margin="2,0"
+                    Style="{StaticResource SubtitleTextBlockStyle}"
+                    Text="地图显示" />
+                <Slider
+                    x:Name="LayerOpacitySlider"
+                    AutomationProperties.Name="气象图层透明度"
+                    Header="气象图层透明度"
+                    Maximum="100"
+                    Minimum="35"
+                    StepFrequency="5" />
+                <ToggleSwitch
+                    x:Name="MapGridToggle"
+                    AutomationProperties.Name="显示经纬网和经纬度"
+                    Header="经纬网与经纬度"
+                    OffContent="隐藏"
+                    OnContent="显示" />
+                <ToggleSwitch
+                    x:Name="MapPlacesToggle"
+                    AutomationProperties.Name="显示城市标注"
+                    Header="城市标注"
+                    OffContent="隐藏"
+                    OnContent="显示" />
+                <TextBlock
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    Text="设置会立即应用到地图，并在下次启动时保留。"
+                    TextWrapping="Wrap" />
+            </StackPanel>
+
+            <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
 
             <StackPanel Spacing="12">
                 <TextBlock

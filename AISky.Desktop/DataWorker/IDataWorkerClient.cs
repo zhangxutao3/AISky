@@ -176,6 +176,9 @@ public sealed record ForecastLayer
     [JsonPropertyName("fieldInfo")]
     public ForecastFieldInfo FieldInfo { get; init; } = new();
 
+    [JsonPropertyName("sample")]
+    public string Sample { get; init; } = "";
+
     [JsonPropertyName("stats")]
     public ForecastStats Stats { get; init; } = new();
 }

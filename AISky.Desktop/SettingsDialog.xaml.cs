@@ -17,6 +17,9 @@ public sealed partial class SettingsDialog : ContentDialog
         KeepInTrayToggle.IsOn = settings.KeepRunningInTray;
         StartWithWindowsToggle.IsOn = settings.StartWithWindows;
         CheckUpdatesToggle.IsOn = settings.CheckUpdatesOnStartup;
+        LayerOpacitySlider.Value = Math.Clamp(settings.MapLayerOpacity, 0.35, 1) * 100;
+        MapGridToggle.IsOn = settings.ShowMapGrid;
+        MapPlacesToggle.IsOn = settings.ShowMapPlaces;
         DataAccessPasswordInput.Password = settings.DataAccessPassword;
         ApplicationVersionText.Text = $"版本 {VersionInfo.CurrentVersion}";
         SelectByTag(ForecastHoursPicker, settings.AutoSyncForecastHours.ToString());
@@ -31,6 +34,9 @@ public sealed partial class SettingsDialog : ContentDialog
         KeepRunningInTray = KeepInTrayToggle.IsOn,
         StartWithWindows = StartWithWindowsToggle.IsOn,
         CheckUpdatesOnStartup = CheckUpdatesToggle.IsOn,
+        MapLayerOpacity = Math.Clamp(LayerOpacitySlider.Value / 100, 0.35, 1),
+        ShowMapGrid = MapGridToggle.IsOn,
+        ShowMapPlaces = MapPlacesToggle.IsOn,
         DataAccessPassword = DataAccessPasswordInput.Password,
     };
 

@@ -124,6 +124,7 @@ public sealed partial class MainPage : Page
                     ? "地图已就绪，等待本地预报数据"
                     : "本地地图与 NetCDF 栅格已连接";
                 SendThemeToMap();
+                SendDisplayOptionsToMap();
                 SendSelectedRunToMap();
                 await App.Services.Log.WriteAsync("INFO", "Map host reported ready.");
                 return;
@@ -447,9 +448,10 @@ public sealed partial class MainPage : Page
             AutoSyncButton.IsChecked = dialog.SelectedSettings.AutoSyncEnabled;
             _suppressAutoSync = false;
             ApplyBackgroundStatus(App.Services.BackgroundSync.CurrentStatus);
+            SendDisplayOptionsToMap();
             await App.Services.Log.WriteAsync(
                 "INFO",
-                $"Settings updated: autoSync={dialog.SelectedSettings.AutoSyncEnabled}, retentionDays={dialog.SelectedSettings.CacheRetentionDays}, keepInTray={dialog.SelectedSettings.KeepRunningInTray}, startWithWindows={dialog.SelectedSettings.StartWithWindows}.");
+                $"Settings updated: autoSync={dialog.SelectedSettings.AutoSyncEnabled}, retentionDays={dialog.SelectedSettings.CacheRetentionDays}, keepInTray={dialog.SelectedSettings.KeepRunningInTray}, startWithWindows={dialog.SelectedSettings.StartWithWindows}, mapOpacity={dialog.SelectedSettings.MapLayerOpacity:F2}.");
         }
         catch (Exception exception)
         {
@@ -879,11 +881,13 @@ public sealed partial class MainPage : Page
                 id = run.Id,
                 model = run.Model,
                 version = run.Version,
+                initKey = run.InitKey,
+                forecastKey = run.ForecastKey,
                 leadHours = run.LeadHours,
                 grid = new
                 {
-                    lat = run.Grid.Latitude,
-                    lon = run.Grid.Longitude,
+                    lat = GridExtent(run.Grid.Latitude),
+                    lon = GridExtent(run.Grid.Longitude),
                     rows = run.Grid.Rows,
                     cols = run.Grid.Columns,
                 },
@@ -896,6 +900,9 @@ public sealed partial class MainPage : Page
                     range = layer.Range,
                     palette = layer.Palette,
                     fieldUrl = BuildDataUrl(layer.Field),
+                    sampleUrl = string.IsNullOrWhiteSpace(layer.Sample)
+                        ? null
+                        : BuildDataUrl(layer.Sample),
                     fieldInfo = new
                     {
                         rows = layer.FieldInfo.Rows,
@@ -905,6 +912,33 @@ public sealed partial class MainPage : Page
                     },
                 }),
             },
+            series = _currentForecastRuns.Select(seriesRun => new
+            {
+                id = seriesRun.Id,
+                model = seriesRun.Model,
+                version = seriesRun.Version,
+                initKey = seriesRun.InitKey,
+                forecastKey = seriesRun.ForecastKey,
+                leadHours = seriesRun.LeadHours,
+                grid = new
+                {
+                    lat = GridExtent(seriesRun.Grid.Latitude),
+                    lon = GridExtent(seriesRun.Grid.Longitude),
+                    rows = seriesRun.Grid.Rows,
+                    cols = seriesRun.Grid.Columns,
+                },
+                layers = seriesRun.Layers.Select(layer => new
+                {
+                    id = layer.Id,
+                    label = layer.Label,
+                    cn = layer.Name,
+                    unit = layer.Unit,
+                    palette = layer.Palette,
+                    sampleUrl = string.IsNullOrWhiteSpace(layer.Sample)
+                        ? null
+                        : BuildDataUrl(layer.Sample),
+                }),
+            }),
         });
     }
 
@@ -914,6 +948,22 @@ public sealed partial class MainPage : Page
             type = "set-theme",
             theme = DarkThemeToggle.IsChecked == true ? "dark" : "light",
         });
+
+    private void SendDisplayOptionsToMap()
+    {
+        if (!_mapReady)
+        {
+            return;
+        }
+        var settings = App.Services.CurrentSettings;
+        PostMapMessage(new
+        {
+            type = "set-display",
+            opacity = settings.MapLayerOpacity,
+            showGrid = settings.ShowMapGrid,
+            showPlaces = settings.ShowMapPlaces,
+        });
+    }
 
     private void UpdateColorBar(LayerItem layer)
     {
@@ -968,6 +1018,9 @@ public sealed partial class MainPage : Page
             relativePath.Replace('\\', '/')
                 .Split('/', StringSplitOptions.RemoveEmptyEntries)
                 .Select(Uri.EscapeDataString));
+
+    private static double[] GridExtent(IReadOnlyList<double> values) =>
+        values.Count == 0 ? [] : [values[0], values[^1]];
 
     private static string FormatUtcKey(string key, string format) =>
         DateTimeOffset.TryParseExact(

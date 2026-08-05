@@ -34,7 +34,8 @@ body {
 }
 
 .map-context,
-.coordinates {
+.coordinates,
+.point-panel {
   position: absolute;
   color: #f5fbfc;
   background: rgba(12, 39, 49, 0.84);
@@ -106,6 +107,209 @@ body {
   letter-spacing: 0.01em;
 }
 
+.point-panel {
+  top: clamp(184px, 25vh, 236px);
+  left: 18px;
+  width: min(420px, calc(100vw - 300px));
+  min-width: 350px;
+  padding: 18px;
+  border-radius: 16px;
+  user-select: text;
+  z-index: 3;
+  animation: point-panel-enter 240ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.point-panel[hidden] {
+  display: none;
+}
+
+.point-panel__header,
+.point-reading,
+.point-chart__summary,
+.point-chart__axis {
+  display: flex;
+  align-items: center;
+}
+
+.point-panel__header {
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.point-panel__heading {
+  min-width: 0;
+}
+
+.point-location {
+  overflow: hidden;
+  color: #b9d3da;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.point-panel h2 {
+  margin: 3px 0 0;
+  overflow: hidden;
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.012em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.point-close {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  padding: 0;
+  color: #edf7f8;
+  background: rgba(230, 244, 246, 0.12);
+  border: 0;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.point-close span::before,
+.point-close span::after {
+  position: absolute;
+  top: 16px;
+  left: 9px;
+  width: 16px;
+  height: 2px;
+  content: "";
+  background: currentColor;
+  border-radius: 1px;
+}
+
+.point-close span::before {
+  transform: rotate(45deg);
+}
+
+.point-close span::after {
+  transform: rotate(-45deg);
+}
+
+.point-close:hover {
+  background: rgba(230, 244, 246, 0.20);
+}
+
+.point-close:focus-visible {
+  outline: 2px solid #5fd7e5;
+  outline-offset: 2px;
+}
+
+.point-reading {
+  position: relative;
+  flex-wrap: wrap;
+  gap: 2px 7px;
+  margin-top: 13px;
+  padding: 12px 14px;
+  color: #102c37;
+  background: #e7f4f5;
+  border-radius: 12px;
+}
+
+.point-reading strong {
+  font-size: 27px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+.point-reading > span {
+  align-self: flex-end;
+  padding-bottom: 4px;
+  color: #496873;
+  font-size: 13px;
+}
+
+.point-reading > div {
+  width: 100%;
+  color: #496873;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.point-chart__summary {
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 14px;
+  color: #d8eaee;
+  font-size: 12px;
+}
+
+#pointCount {
+  color: #82dbe4;
+  font-variant-numeric: tabular-nums;
+}
+
+.point-chart {
+  position: relative;
+  height: 132px;
+  margin-top: 7px;
+  overflow: hidden;
+  background: rgba(232, 246, 247, 0.08);
+  border-radius: 10px;
+}
+
+#pointChart {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.point-chart__empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  color: #b9d3da;
+  font-size: 12px;
+  text-align: center;
+}
+
+.point-chart__empty[hidden] {
+  display: none;
+}
+
+.point-chart__axis {
+  justify-content: space-between;
+  margin-top: 5px;
+  color: #9fbfc7;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.point-status {
+  margin-top: 10px;
+  overflow: hidden;
+  color: #b9d3da;
+  font-size: 11px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes point-panel-enter {
+  from {
+    opacity: 0.72;
+    transform: translateX(-30px);
+    clip-path: inset(0 100% 0 0 round 16px);
+    filter: blur(3px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+    clip-path: inset(0 0 0 0 round 16px);
+    filter: blur(0);
+  }
+}
+
 @media (max-width: 980px) {
   .map-context {
     top: 78px;
@@ -116,6 +320,23 @@ body {
     left: 10px;
     bottom: 104px;
     max-width: 250px;
+  }
+
+  .point-panel {
+    top: 168px;
+    left: 10px;
+    width: min(400px, calc(100vw - 180px));
+    min-width: 310px;
+  }
+}
+
+@media (max-width: 640px) {
+  .point-panel {
+    top: 138px;
+    right: 10px;
+    left: 10px;
+    width: auto;
+    min-width: 0;
   }
 }
 

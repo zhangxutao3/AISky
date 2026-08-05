@@ -4,20 +4,42 @@ const coordinateLabel = document.querySelector("#coordinates");
 const layerLabel = document.querySelector("#layerName");
 const leadLabel = document.querySelector("#leadName");
 const dataStatus = document.querySelector("#dataStatus");
+const pointPanel = document.querySelector("#pointPanel");
+const pointClose = document.querySelector("#pointClose");
+const pointLocation = document.querySelector("#pointLocation");
+const pointLayerName = document.querySelector("#pointLayerName");
+const pointValue = document.querySelector("#pointValue");
+const pointUnit = document.querySelector("#pointUnit");
+const pointValidTime = document.querySelector("#pointValidTime");
+const pointRange = document.querySelector("#pointRange");
+const pointCount = document.querySelector("#pointCount");
+const pointChart = document.querySelector("#pointChart");
+const pointChartEmpty = document.querySelector("#pointChartEmpty");
+const pointFirstTime = document.querySelector("#pointFirstTime");
+const pointLastTime = document.querySelector("#pointLastTime");
+const pointStatus = document.querySelector("#pointStatus");
 
 const defaultView = { left: 45, right: 165, top: 72, bottom: 5 };
 const view = { ...defaultView };
 const fieldCache = new Map();
+const sampleCache = new Map();
 let coastlines = [];
 let places = [];
 let activeRun = null;
+let forecastSeries = [];
 let activeLayerId = "";
 let activeLead = 0;
 let activeField = null;
 let renderGeneration = 0;
+let pointGeneration = 0;
 let renderQueued = false;
 let dragState = null;
+let suppressMapClick = false;
+let pointSelection = null;
 let mapTheme = "light";
+let fieldOpacity = 0.93;
+let showGrid = true;
+let showPlaces = true;
 
 function project(lon, lat, width, height) {
   return [
@@ -113,6 +135,202 @@ function sampleField(field, lon, lat) {
   return low + (encoded / 65534) * (high - low);
 }
 
+function sampleGrid(values, grid, lon, lat) {
+  const rows = values?.length ?? 0;
+  const columns = values?.[0]?.length ?? 0;
+  if (rows === 0 || columns === 0 || grid?.lat?.length < 2 || grid?.lon?.length < 2) {
+    return null;
+  }
+  const [firstLat, lastLat] = grid.lat;
+  const [firstLon, lastLon] = grid.lon;
+  const normalizedLon = normalizeLongitude(lon, firstLon, lastLon);
+  const rowFraction = (lat - firstLat) / (lastLat - firstLat);
+  const columnFraction = (normalizedLon - firstLon) / (lastLon - firstLon);
+  if (
+    !Number.isFinite(rowFraction) ||
+    !Number.isFinite(columnFraction) ||
+    rowFraction < 0 ||
+    rowFraction > 1 ||
+    columnFraction < 0 ||
+    columnFraction > 1
+  ) {
+    return null;
+  }
+  const row = Math.max(0, Math.min(rows - 1, Math.round(rowFraction * (rows - 1))));
+  const column = Math.max(0, Math.min(columns - 1, Math.round(columnFraction * (columns - 1))));
+  const value = values[row]?.[column];
+  return Number.isFinite(value) ? value : null;
+}
+
+function formatValue(value, digits = 2) {
+  if (!Number.isFinite(value)) return "--";
+  return Number(value).toLocaleString("zh-CN", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
+}
+
+function formatForecastKey(key) {
+  const match = String(key || "").match(/^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})$/);
+  return match ? `${match[2]}-${match[3]} ${match[4]}:${match[5]}` : String(key || "--");
+}
+
+async function loadSample(layer) {
+  if (!layer?.sampleUrl) return null;
+  if (sampleCache.has(layer.sampleUrl)) return sampleCache.get(layer.sampleUrl);
+  const response = await fetch(layer.sampleUrl, { cache: "force-cache" });
+  if (!response.ok) throw new Error(`抽样缓存读取失败：HTTP ${response.status}`);
+  const values = await response.json();
+  if (!Array.isArray(values) || !Array.isArray(values[0])) {
+    throw new Error("抽样缓存格式无效");
+  }
+  sampleCache.set(layer.sampleUrl, values);
+  while (sampleCache.size > 24) sampleCache.delete(sampleCache.keys().next().value);
+  return values;
+}
+
+async function mapWithConcurrency(items, limit, worker) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await worker(items[index], index);
+    }
+  });
+  await Promise.all(runners);
+  return results;
+}
+
+function drawPointChart(series) {
+  const ratio = Math.min(window.devicePixelRatio || 1, 2);
+  const width = Math.max(1, Math.round(pointChart.clientWidth * ratio));
+  const height = Math.max(1, Math.round(pointChart.clientHeight * ratio));
+  pointChart.width = width;
+  pointChart.height = height;
+  const chartContext = pointChart.getContext("2d");
+  chartContext.clearRect(0, 0, width, height);
+
+  const valid = series.filter((item) => Number.isFinite(item.value));
+  if (valid.length === 0) {
+    pointChartEmpty.hidden = false;
+    pointChartEmpty.textContent = "该格点暂无有效预报值";
+    return;
+  }
+
+  pointChartEmpty.hidden = true;
+  const values = valid.map((item) => item.value);
+  let minimum = Math.min(...values);
+  let maximum = Math.max(...values);
+  if (Math.abs(maximum - minimum) < 1e-6) {
+    minimum -= 0.5;
+    maximum += 0.5;
+  }
+  const padding = {
+    top: 12 * ratio,
+    right: 10 * ratio,
+    bottom: 12 * ratio,
+    left: 40 * ratio,
+  };
+  const plotWidth = width - padding.left - padding.right;
+  const plotHeight = height - padding.top - padding.bottom;
+  const baseY = padding.top + plotHeight;
+  const slotWidth = plotWidth / Math.max(1, series.length);
+  const barWidth = Math.max(2 * ratio, Math.min(9 * ratio, slotWidth * 0.62));
+
+  chartContext.font = `${10 * ratio}px "Segoe UI Variable"`;
+  chartContext.textAlign = "right";
+  chartContext.textBaseline = "middle";
+  chartContext.fillStyle = mapTheme === "dark" ? "#b8d4da" : "#c5dce1";
+  chartContext.strokeStyle = "rgba(205, 230, 234, 0.15)";
+  chartContext.lineWidth = ratio;
+  for (let index = 0; index < 3; index += 1) {
+    const amount = index / 2;
+    const y = padding.top + plotHeight * amount;
+    const value = maximum - (maximum - minimum) * amount;
+    chartContext.beginPath();
+    chartContext.moveTo(padding.left, y);
+    chartContext.lineTo(width - padding.right, y);
+    chartContext.stroke();
+    chartContext.fillText(formatValue(value, 1), padding.left - 6 * ratio, y);
+  }
+
+  for (let index = 0; index < series.length; index += 1) {
+    const item = series[index];
+    if (!Number.isFinite(item.value)) continue;
+    const normalized = (item.value - minimum) / (maximum - minimum);
+    const barHeight = Math.max(2 * ratio, normalized * (plotHeight - 3 * ratio));
+    const x = padding.left + slotWidth * (index + 0.5) - barWidth / 2;
+    const isCurrent = item.id === activeRun?.id;
+    chartContext.fillStyle = isCurrent ? "#f2b63e" : "#20b7d0";
+    chartContext.fillRect(x, baseY - barHeight, barWidth, barHeight);
+  }
+}
+
+async function showPointDetails(lon, lat) {
+  const generation = ++pointGeneration;
+  pointSelection = { lon, lat };
+  pointPanel.hidden = false;
+  const layer = activeRun?.layers?.find((item) => item.id === activeLayerId)
+    ?? activeRun?.layers?.[0];
+  const current = activeField ? sampleField(activeField, lon, lat) : null;
+
+  pointLocation.textContent = `经度 ${lon.toFixed(2)} · 纬度 ${lat.toFixed(2)}`;
+  pointLayerName.textContent = layer ? `${layer.label} · ${layer.cn}` : "格点预报";
+  pointValue.textContent = formatValue(current);
+  pointUnit.textContent = layer?.unit || "";
+  pointValidTime.textContent = activeRun
+    ? `${formatForecastKey(activeRun.forecastKey)} UTC · ${activeRun.model} · ${activeLead >= 0 ? "+" : ""}${activeLead}h`
+    : "暂无本地预报数据";
+  pointRange.textContent = "同一起报多时次预报";
+  pointCount.textContent = "--";
+  pointFirstTime.textContent = "--";
+  pointLastTime.textContent = "--";
+  pointChartEmpty.hidden = false;
+  pointChartEmpty.textContent = "正在读取本地预报序列";
+  pointStatus.textContent = "正在从本地轻量缓存提取该格点";
+  drawPointChart([]);
+
+  if (!layer || forecastSeries.length === 0) {
+    pointChartEmpty.textContent = "当前起报暂无可用的时间序列";
+    pointStatus.textContent = "请先选择包含本地数据的模型与起报时间";
+    return;
+  }
+
+  let completed = 0;
+  const series = await mapWithConcurrency(forecastSeries, 6, async (seriesRun) => {
+    const seriesLayer = seriesRun.layers?.find((item) => item.id === layer.id);
+    let value = null;
+    try {
+      const sample = await loadSample(seriesLayer);
+      value = sample ? sampleGrid(sample, seriesRun.grid, lon, lat) : null;
+    } catch {
+      value = null;
+    }
+    completed += 1;
+    if (generation === pointGeneration) {
+      pointStatus.textContent = `正在读取本地预报序列 · ${completed}/${forecastSeries.length}`;
+    }
+    return {
+      id: seriesRun.id,
+      leadHours: seriesRun.leadHours,
+      forecastKey: seriesRun.forecastKey,
+      value,
+    };
+  });
+  if (generation !== pointGeneration) return;
+
+  const validCount = series.filter((item) => Number.isFinite(item.value)).length;
+  pointCount.textContent = `${validCount}/${series.length} 个有效时次`;
+  pointFirstTime.textContent = formatForecastKey(series[0]?.forecastKey);
+  pointLastTime.textContent = formatForecastKey(series.at(-1)?.forecastKey);
+  pointStatus.textContent = validCount > 0
+    ? "曲线来自当前起报的本地抽样缓存；主数值来自完整栅格"
+    : "该格点没有有效值，可尝试选择其他位置或图层";
+  requestAnimationFrame(() => drawPointChart(series));
+}
+
 function drawRealField(width, height, field) {
   drawEmptyField(width, height);
   const scale = Math.max(2, Math.round(window.devicePixelRatio * 2));
@@ -155,12 +373,16 @@ function drawRealField(width, height, field) {
   }
 
   rasterContext.putImageData(image, 0, 0);
+  context.save();
+  context.globalAlpha = fieldOpacity;
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = "high";
   context.drawImage(raster, 0, 0, width, height);
+  context.restore();
 }
 
 function drawGrid(width, height) {
+  if (!showGrid) return;
   context.save();
   context.lineWidth = Math.max(1, window.devicePixelRatio);
   context.strokeStyle = mapTheme === "dark"
@@ -227,6 +449,10 @@ function drawCoastlines(width, height) {
   context.lineJoin = "round";
   context.font = `600 ${12 * window.devicePixelRatio}px "Segoe UI Variable"`;
   context.textBaseline = "alphabetic";
+  if (!showPlaces) {
+    context.restore();
+    return;
+  }
   const occupied = [];
   const longitudeSpan = view.right - view.left;
   const rankLimit = longitudeSpan > 90 ? 1 : 2;
@@ -259,6 +485,21 @@ function drawCoastlines(width, height) {
     context.strokeText(place.name, labelX, labelY);
     context.fillText(place.name, labelX, labelY);
   }
+  context.restore();
+}
+
+function drawPointMarker(width, height) {
+  if (!pointSelection) return;
+  const [x, y] = project(pointSelection.lon, pointSelection.lat, width, height);
+  if (x < -20 || y < -20 || x > width + 20 || y > height + 20) return;
+  context.save();
+  context.beginPath();
+  context.arc(x, y, 7 * window.devicePixelRatio, 0, Math.PI * 2);
+  context.fillStyle = "#e43b32";
+  context.fill();
+  context.lineWidth = 3 * window.devicePixelRatio;
+  context.strokeStyle = "#ffffff";
+  context.stroke();
   context.restore();
 }
 
@@ -308,11 +549,13 @@ async function render() {
     }
     drawGrid(width, height);
     drawCoastlines(width, height);
+    drawPointMarker(width, height);
   } catch (error) {
     activeField = null;
     drawEmptyField(width, height);
     drawGrid(width, height);
     drawCoastlines(width, height);
+    drawPointMarker(width, height);
     dataStatus.textContent = "栅格加载失败";
     window.chrome?.webview?.postMessage({ type: "map-error", message: String(error.message || error) });
   }
@@ -338,10 +581,16 @@ async function loadAssets() {
 
 canvas.addEventListener("pointerdown", (event) => {
   canvas.setPointerCapture(event.pointerId);
-  dragState = { x: event.clientX, y: event.clientY, view: { ...view } };
+  dragState = {
+    x: event.clientX,
+    y: event.clientY,
+    moved: false,
+    view: { ...view },
+  };
 });
 
 canvas.addEventListener("pointerup", (event) => {
+  suppressMapClick = Boolean(dragState?.moved);
   if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
   dragState = null;
 });
@@ -352,6 +601,11 @@ canvas.addEventListener("pointercancel", () => {
 
 canvas.addEventListener("pointermove", (event) => {
   if (dragState) {
+    if (Math.hypot(event.clientX - dragState.x, event.clientY - dragState.y) > 4) {
+      dragState.moved = true;
+    }
+  }
+  if (dragState?.moved) {
     const lonPerPixel = (dragState.view.right - dragState.view.left) / canvas.clientWidth;
     const latPerPixel = (dragState.view.top - dragState.view.bottom) / canvas.clientHeight;
     const deltaLon = (event.clientX - dragState.x) * lonPerPixel;
@@ -370,6 +624,30 @@ canvas.addEventListener("pointermove", (event) => {
     : `　${value.toFixed(2)} ${activeField.layer.unit || ""}`.trimEnd();
   coordinateLabel.textContent =
     `经度 ${lon.toFixed(2)}　纬度 ${lat.toFixed(2)}${valueText}`;
+});
+
+canvas.addEventListener("click", (event) => {
+  if (suppressMapClick) {
+    suppressMapClick = false;
+    return;
+  }
+  const [lon, lat] = unproject(event.offsetX, event.offsetY);
+  void showPointDetails(lon, lat);
+  requestRender();
+});
+
+pointClose.addEventListener("click", () => {
+  pointGeneration += 1;
+  pointPanel.hidden = true;
+  pointSelection = null;
+  requestRender();
+  canvas.focus();
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !pointPanel.hidden) {
+    pointClose.click();
+  }
 });
 
 canvas.addEventListener("wheel", (event) => {
@@ -391,13 +669,22 @@ window.chrome?.webview?.addEventListener("message", (event) => {
   const message = event.data;
   if (message.type === "set-data") {
     activeRun = message.run || null;
+    forecastSeries = Array.isArray(message.series) ? message.series : [];
     activeLayerId = message.layer || activeRun?.layers?.[0]?.id || "";
     activeLead = Number(activeRun?.leadHours ?? message.lead ?? 0);
     leadLabel.textContent = activeLead >= 0 ? `+${activeLead}h` : `${activeLead}h`;
-    void render();
+    void render().then(() => {
+      if (pointSelection && !pointPanel.hidden) {
+        void showPointDetails(pointSelection.lon, pointSelection.lat);
+      }
+    });
   } else if (message.type === "set-layer") {
     activeLayerId = String(message.layer || "").toLowerCase();
-    void render();
+    void render().then(() => {
+      if (pointSelection && !pointPanel.hidden) {
+        void showPointDetails(pointSelection.lon, pointSelection.lat);
+      }
+    });
   } else if (message.type === "set-lead") {
     activeLead = Number(message.lead) || 0;
     leadLabel.textContent = activeLead >= 0 ? `+${activeLead}h` : `${activeLead}h`;
@@ -408,10 +695,21 @@ window.chrome?.webview?.addEventListener("message", (event) => {
     mapTheme = message.theme === "dark" ? "dark" : "light";
     document.documentElement.style.colorScheme = mapTheme;
     void render();
+  } else if (message.type === "set-display") {
+    fieldOpacity = Math.max(0.35, Math.min(1, Number(message.opacity) || 0.93));
+    showGrid = message.showGrid !== false;
+    showPlaces = message.showPlaces !== false;
+    void render();
   }
 });
 
-window.addEventListener("resize", requestRender);
+window.addEventListener("resize", () => {
+  requestRender();
+  if (!pointPanel.hidden) {
+    requestAnimationFrame(() => drawPointChart([]));
+    void showPointDetails(pointSelection.lon, pointSelection.lat);
+  }
+});
 loadAssets()
   .catch((error) => {
     window.chrome?.webview?.postMessage({ type: "map-error", message: String(error.message || error) });

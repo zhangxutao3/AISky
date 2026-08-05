@@ -13,4 +13,7 @@ public sealed record AppSettings
     public bool StartWithWindows { get; init; }
     public bool KeepRunningInTray { get; init; } = true;
     public bool CheckUpdatesOnStartup { get; init; } = true;
+    public double MapLayerOpacity { get; init; } = 0.93;
+    public bool ShowMapGrid { get; init; } = true;
+    public bool ShowMapPlaces { get; init; } = true;
 }
