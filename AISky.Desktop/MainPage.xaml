@@ -41,6 +41,14 @@
             <Setter Property="Padding" Value="0" />
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
+        <Style
+            x:Key="TopRunPickerComboBoxStyle"
+            BasedOn="{StaticResource AISkyCompactComboBoxStyle}"
+            TargetType="ComboBox">
+            <Setter Property="Height" Value="32" />
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+        </Style>
     </Page.Resources>
 
     <!-- Visual direction: airy cloud-white controls, slate typography, and restrained mint/sky iridescence over a map-first canvas. -->
@@ -59,8 +67,9 @@
                         <Setter Target="RightRail.Width" Value="168" />
                         <Setter Target="RightRail.Margin" Value="0,82,8,112" />
                         <Setter Target="LayerPanel.Padding" Value="8" />
+                        <Setter Target="LayerCategoryPicker.Visibility" Value="Collapsed" />
                         <Setter Target="LayerHint.Visibility" Value="Collapsed" />
-                        <Setter Target="TopChrome.Margin" Value="40,20,8,0" />
+                        <Setter Target="TopChrome.Margin" Value="8,20,8,0" />
                         <Setter Target="TimelinePanel.Margin" Value="8,0,8,8" />
                         <Setter Target="TimelineCaption.Visibility" Value="Collapsed" />
                         <Setter Target="FirstRunCard.Width" Value="340" />
@@ -80,8 +89,9 @@
                         <Setter Target="RightRail.Width" Value="228" />
                         <Setter Target="RightRail.Margin" Value="0,84,12,118" />
                         <Setter Target="LayerPanel.Padding" Value="10" />
+                        <Setter Target="LayerCategoryPicker.Visibility" Value="Visible" />
                         <Setter Target="LayerHint.Visibility" Value="Visible" />
-                        <Setter Target="TopChrome.Margin" Value="42,20,12,0" />
+                        <Setter Target="TopChrome.Margin" Value="12,20,12,0" />
                         <Setter Target="TimelinePanel.Margin" Value="12,0,12,12" />
                         <Setter Target="TimelineCaption.Visibility" Value="Visible" />
                         <Setter Target="FirstRunCard.Width" Value="520" />
@@ -101,8 +111,9 @@
                         <Setter Target="RightRail.Width" Value="252" />
                         <Setter Target="RightRail.Margin" Value="0,86,18,124" />
                         <Setter Target="LayerPanel.Padding" Value="12" />
+                        <Setter Target="LayerCategoryPicker.Visibility" Value="Visible" />
                         <Setter Target="LayerHint.Visibility" Value="Visible" />
-                        <Setter Target="TopChrome.Margin" Value="44,20,18,0" />
+                        <Setter Target="TopChrome.Margin" Value="18,20,18,0" />
                         <Setter Target="TimelinePanel.Margin" Value="18,0,18,16" />
                         <Setter Target="TimelineCaption.Visibility" Value="Visible" />
                         <Setter Target="FirstRunCard.Width" Value="560" />
@@ -150,7 +161,7 @@
 
         <Grid
             x:Name="TopChrome"
-            Margin="44,20,18,0"
+            Margin="18,20,18,0"
             VerticalAlignment="Top">
 
             <Border
@@ -295,7 +306,7 @@
                 x:Name="RunPickerBorder"
                 Width="650"
                 Height="58"
-                Padding="10,8"
+                Padding="10,4"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Top"
                 Style="{StaticResource AISkyFloatingPanelStyle}">
@@ -305,34 +316,67 @@
                         <ColumnDefinition Width="1.18*" />
                         <ColumnDefinition Width="1.28*" />
                     </Grid.ColumnDefinitions>
-                    <ComboBox
-                        x:Name="ModelPicker"
-                        Grid.Column="0"
-                        MinWidth="150"
-                        AutomationProperties.Name="模型"
-                        SelectedIndex="0"
-                        SelectionChanged="ModelPicker_SelectionChanged"
-                        Style="{StaticResource AISkyCompactComboBoxStyle}"
-                        ToolTipService.ToolTip="模型">
-                        <ComboBoxItem Content="AISky-Energy" />
-                        <ComboBoxItem Content="AISky-SDS" />
-                    </ComboBox>
-                    <ComboBox
-                        x:Name="InitPicker"
-                        Grid.Column="1"
-                        MinWidth="164"
-                        AutomationProperties.Name="起报时间"
-                        SelectionChanged="InitPicker_SelectionChanged"
-                        Style="{StaticResource AISkyCompactComboBoxStyle}"
-                        ToolTipService.ToolTip="起报时间（当前显示时区）" />
-                    <ComboBox
-                        x:Name="ForecastPicker"
-                        Grid.Column="2"
-                        MinWidth="176"
-                        AutomationProperties.Name="预报时效"
-                        SelectionChanged="ForecastPicker_SelectionChanged"
-                        Style="{StaticResource AISkyCompactComboBoxStyle}"
-                        ToolTipService.ToolTip="预报时效（当前显示时区）" />
+                    <Grid VerticalAlignment="Center" RowSpacing="-1">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <TextBlock
+                            Margin="6,0,0,0"
+                            Foreground="{ThemeResource AISkyTextMutedBrush}"
+                            FontSize="10"
+                            Text="模型" />
+                        <ComboBox
+                            x:Name="ModelPicker"
+                            Grid.Row="1"
+                            MinWidth="150"
+                            AutomationProperties.Name="模型"
+                            SelectedIndex="0"
+                            SelectionChanged="ModelPicker_SelectionChanged"
+                            Style="{StaticResource TopRunPickerComboBoxStyle}"
+                            ToolTipService.ToolTip="模型">
+                            <ComboBoxItem Content="AISky-Energy" />
+                            <ComboBoxItem Content="AISky-SDS" />
+                        </ComboBox>
+                    </Grid>
+                    <Grid Grid.Column="1" VerticalAlignment="Center" RowSpacing="-1">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <TextBlock
+                            Margin="6,0,0,0"
+                            Foreground="{ThemeResource AISkyTextMutedBrush}"
+                            FontSize="10"
+                            Text="起报时间" />
+                        <ComboBox
+                            x:Name="InitPicker"
+                            Grid.Row="1"
+                            MinWidth="164"
+                            AutomationProperties.Name="起报时间"
+                            SelectionChanged="InitPicker_SelectionChanged"
+                            Style="{StaticResource TopRunPickerComboBoxStyle}"
+                            ToolTipService.ToolTip="起报时间（当前显示时区）" />
+                    </Grid>
+                    <Grid Grid.Column="2" VerticalAlignment="Center" RowSpacing="-1">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <TextBlock
+                            Margin="6,0,0,0"
+                            Foreground="{ThemeResource AISkyTextMutedBrush}"
+                            FontSize="10"
+                            Text="预报时间" />
+                        <ComboBox
+                            x:Name="ForecastPicker"
+                            Grid.Row="1"
+                            MinWidth="176"
+                            AutomationProperties.Name="预报时效"
+                            SelectionChanged="ForecastPicker_SelectionChanged"
+                            Style="{StaticResource TopRunPickerComboBoxStyle}"
+                            ToolTipService.ToolTip="预报时效（当前显示时区）" />
+                    </Grid>
                 </Grid>
             </Border>
 
@@ -399,6 +443,7 @@
             <Grid RowSpacing="10">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
@@ -435,9 +480,39 @@
                             Text="0" />
                     </Border>
                 </Grid>
+                <Grid Grid.Row="1" Margin="4,0" ColumnSpacing="7">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <AutoSuggestBox
+                        x:Name="LayerSearchBox"
+                        Height="34"
+                        MinWidth="0"
+                        AutomationProperties.Name="搜索预报变量"
+                        PlaceholderText="搜索变量"
+                        QueryIcon="Find"
+                        TextChanged="LayerSearchBox_TextChanged" />
+                    <ComboBox
+                        x:Name="LayerCategoryPicker"
+                        Grid.Column="1"
+                        Height="34"
+                        MinWidth="0"
+                        AutomationProperties.Name="变量分类"
+                        SelectedIndex="0"
+                        SelectionChanged="LayerCategoryPicker_SelectionChanged"
+                        ToolTipService.ToolTip="按变量类别筛选">
+                        <ComboBoxItem Content="全部" Tag="全部" />
+                        <ComboBoxItem Content="基础场" Tag="基础场" />
+                        <ComboBoxItem Content="水分降水" Tag="水分降水" />
+                        <ComboBoxItem Content="云与辐射" Tag="云与辐射" />
+                        <ComboBoxItem Content="沙尘气溶胶" Tag="沙尘气溶胶" />
+                        <ComboBoxItem Content="陆面" Tag="陆面" />
+                    </ComboBox>
+                </Grid>
                 <ListView
                     x:Name="LayerList"
-                    Grid.Row="1"
+                    Grid.Row="2"
                     AutomationProperties.Name="预报图层"
                     IsTabStop="True"
                     ItemsSource="{x:Bind LayerItems}"
@@ -485,7 +560,7 @@
                 </ListView>
                 <TextBlock
                     x:Name="LayerHint"
-                    Grid.Row="2"
+                    Grid.Row="3"
                     Margin="4,0,4,2"
                     Foreground="{ThemeResource AISkyTextMutedBrush}"
                     Style="{StaticResource CaptionTextBlockStyle}"
@@ -493,7 +568,7 @@
                     TextWrapping="Wrap" />
                 <ToggleSwitch
                     x:Name="WindAnimationToggle"
-                    Grid.Row="3"
+                    Grid.Row="4"
                     Margin="4,2,4,0"
                     AutomationProperties.Name="切换风场流线"
                     Header="风场流线"

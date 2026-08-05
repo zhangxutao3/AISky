@@ -35,6 +35,7 @@ public sealed partial class MainPage : Page
     private string? _lastLayerSetKey;
     private string? _lastMapSeriesKey;
     private readonly List<Button> _timelineSlotButtons = [];
+    private readonly List<LayerItem> _allLayerItems = [];
 
     public ObservableCollection<LayerItem> LayerItems { get; } = [];
 
@@ -791,6 +792,65 @@ public sealed partial class MainPage : Page
         PostMapMessage(new { type = "set-layer", layer = layer.Id });
     }
 
+    private void LayerSearchBox_TextChanged(
+        AutoSuggestBox sender,
+        AutoSuggestBoxTextChangedEventArgs args)
+    {
+        if (args.Reason == AutoSuggestionBoxTextChangeReason.UserInput)
+        {
+            ApplyLayerFilter();
+        }
+    }
+
+    private void LayerCategoryPicker_SelectionChanged(
+        object sender,
+        SelectionChangedEventArgs e) =>
+        ApplyLayerFilter();
+
+    private void ApplyLayerFilter(string? preferredLayerId = null)
+    {
+        if (LayerList is null
+            || LayerSearchBox is null
+            || LayerCategoryPicker is null
+            || LayerCountText is null
+            || LayerHint is null)
+        {
+            return;
+        }
+
+        var selectedLayerId = preferredLayerId
+            ?? (LayerList.SelectedItem as LayerItem)?.Id;
+        var search = LayerSearchBox.Text.Trim();
+        var category =
+            (LayerCategoryPicker.SelectedItem as ComboBoxItem)?.Tag as string
+            ?? "全部";
+        var filtered = _allLayerItems.Where(layer =>
+            (category == "全部" || layer.Category == category)
+            && (search.Length == 0
+                || layer.Code.Contains(search, StringComparison.OrdinalIgnoreCase)
+                || layer.Name.Contains(search, StringComparison.CurrentCultureIgnoreCase)
+                || layer.Category.Contains(search, StringComparison.CurrentCultureIgnoreCase)))
+            .ToList();
+
+        LayerItems.Clear();
+        foreach (var layer in filtered)
+        {
+            LayerItems.Add(layer);
+        }
+
+        var filterActive = category != "全部" || search.Length > 0;
+        LayerCountText.Text = filterActive
+            ? $"{filtered.Count}/{_allLayerItems.Count}"
+            : _allLayerItems.Count.ToString(CultureInfo.InvariantCulture);
+        LayerHint.Text = filtered.Count == 0
+            ? "没有匹配的变量，请调整关键词或分类"
+            : "颜色和值域随产品自动更新";
+        var selectedIndex = LayerItems
+            .Select((layer, index) => new { layer.Id, Index = index })
+            .FirstOrDefault(item => item.Id == selectedLayerId)?.Index ?? 0;
+        LayerList.SelectedIndex = LayerItems.Count == 0 ? -1 : selectedIndex;
+    }
+
     private void TimelineSlot_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: int index }
@@ -999,6 +1059,7 @@ public sealed partial class MainPage : Page
         _selectedRun = run;
         if (run is null)
         {
+            _allLayerItems.Clear();
             LayerItems.Clear();
             LayerCountText.Text = "0";
             LeadText.Text = "--";
@@ -1034,16 +1095,12 @@ public sealed partial class MainPage : Page
         if (!string.Equals(_lastLayerSetKey, layerSetKey, StringComparison.Ordinal))
         {
             var previousLayer = (LayerList.SelectedItem as LayerItem)?.Id;
-            LayerItems.Clear();
+            _allLayerItems.Clear();
             foreach (var layer in run.Layers)
             {
-                LayerItems.Add(LayerItem.FromForecastLayer(layer));
+                _allLayerItems.Add(LayerItem.FromForecastLayer(layer));
             }
-            LayerCountText.Text = LayerItems.Count.ToString(CultureInfo.InvariantCulture);
-            var layerIndex = LayerItems
-                .Select((layer, index) => new { layer.Id, Index = index })
-                .FirstOrDefault(item => item.Id == previousLayer)?.Index ?? 0;
-            LayerList.SelectedIndex = LayerItems.Count == 0 ? -1 : layerIndex;
+            ApplyLayerFilter(previousLayer);
             _lastLayerSetKey = layerSetKey;
         }
 
@@ -1363,6 +1420,7 @@ public sealed class LayerItem
     public string Code { get; set; } = "";
     public string Name { get; set; } = "";
     public string Unit { get; set; } = "";
+    public string Category { get; set; } = "基础场";
     public List<double> Range { get; set; } = [];
     public List<string> Palette { get; set; } = [];
     public string Thumbnail { get; set; } = "";
@@ -1379,11 +1437,36 @@ public sealed class LayerItem
             Code = layer.Label,
             Name = layer.Name,
             Unit = layer.Unit,
+            Category = Categorize(layer.Label),
             Range = layer.Range,
             Palette = palette,
             Thumbnail = $"ms-appx:///Assets/Layers/{layer.Id}.png",
             Brush = CreateBrush(palette),
         };
+    }
+
+    private static string Categorize(string code)
+    {
+        var normalized = code.ToUpperInvariant();
+        if (normalized is "QV2M" or "QV10M" or "TQV" or "PRECTOT")
+        {
+            return "水分降水";
+        }
+        if (normalized is "CLDTOT" or "CLDLOW" or "CLDMID" or "CLDHGH"
+            or "SWGDN" or "SWGDNCLR" or "SWTDN" or "SWGNT" or "ALBEDO")
+        {
+            return "云与辐射";
+        }
+        if (normalized.StartsWith("DU", StringComparison.Ordinal)
+            || normalized is "TAUTOT" or "TOTEXTTAU")
+        {
+            return "沙尘气溶胶";
+        }
+        if (normalized is "GWETTOP" or "FRSNO" or "LAI" or "Z0M")
+        {
+            return "陆面";
+        }
+        return "基础场";
     }
 
     private static Brush CreateBrush(IReadOnlyList<string> colors)

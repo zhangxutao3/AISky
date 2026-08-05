@@ -56,7 +56,7 @@ body {
 
 .coordinates {
   left: 18px;
-  bottom: 116px;
+  bottom: 170px;
   max-width: 360px;
   padding: 8px 11px;
   border-radius: 11px;
@@ -271,11 +271,18 @@ body {
   }
 }
 
+@media (max-width: 1419px) {
+  .coordinates {
+    left: 12px;
+    bottom: 168px;
+    max-width: 250px;
+  }
+}
+
 @media (max-width: 980px) {
   .coordinates {
-    left: 10px;
-    bottom: 104px;
-    max-width: 250px;
+    left: 8px;
+    bottom: 162px;
   }
 
   .point-panel {
