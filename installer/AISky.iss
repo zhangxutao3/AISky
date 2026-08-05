@@ -50,6 +50,10 @@ AppMutex=Local\AISky.Desktop.SingleInstance
 UsePreviousAppDir=yes
 UsePreviousTasks=yes
 SetupLogging=yes
+#ifdef SigningEnabled
+SignTool=aisky
+SignedUninstaller=yes
+#endif
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"

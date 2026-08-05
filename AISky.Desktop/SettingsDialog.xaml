@@ -241,7 +241,7 @@
                     VerticalAlignment="Center"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     Style="{StaticResource CaptionTextBlockStyle}"
-                    Text="版本 0.8.4" />
+                    Text="版本 0.8.5" />
             </Grid>
         </StackPanel>
     </ScrollViewer>

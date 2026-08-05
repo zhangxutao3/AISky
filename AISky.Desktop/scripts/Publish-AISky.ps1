@@ -11,11 +11,106 @@ param(
     [string]$PythonArchivePath = '',
     [string]$PythonRuntimePath = '',
     [string]$InstallerCompilerPath = '',
+    [string]$SigningCertificateThumbprint = '',
+    [string]$SignToolPath = '',
+    [string]$TimestampUrl = 'http://timestamp.digicert.com',
     [switch]$SkipInstaller,
+    [switch]$AllowUnsignedRelease,
     [switch]$Upload
 )
 
 $ErrorActionPreference = 'Stop'
+
+function Resolve-CodeSigningTool {
+    param([string]$RequestedPath)
+
+    if (-not [string]::IsNullOrWhiteSpace($RequestedPath)) {
+        $resolved = (Resolve-Path -LiteralPath $RequestedPath).Path
+        if (-not (Test-Path -LiteralPath $resolved -PathType Leaf)) {
+            throw "SignTool 不存在：$resolved"
+        }
+        return $resolved
+    }
+
+    $packageRoot = Join-Path $env:USERPROFILE '.nuget\packages\microsoft.windows.sdk.buildtools'
+    $candidate = Get-ChildItem -LiteralPath $packageRoot -Filter 'signtool.exe' -Recurse -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -match '\\x64\\signtool\.exe$' } |
+        Sort-Object FullName -Descending |
+        Select-Object -First 1 -ExpandProperty FullName
+    if ([string]::IsNullOrWhiteSpace($candidate)) {
+        throw '没有找到 Microsoft SignTool.exe。请安装 Windows SDK 或使用 -SignToolPath 指定。'
+    }
+    return $candidate
+}
+
+function Assert-CodeSigningCertificate {
+    param([string]$Thumbprint)
+
+    $normalized = ($Thumbprint -replace '\s', '').ToUpperInvariant()
+    if ($normalized -notmatch '^[0-9A-F]{40}$') {
+        throw 'SigningCertificateThumbprint 必须是 40 位十六进制证书指纹。'
+    }
+    $certificate = Get-ChildItem Cert:\CurrentUser\My, Cert:\LocalMachine\My -ErrorAction SilentlyContinue |
+        Where-Object { $_.Thumbprint -eq $normalized } |
+        Select-Object -First 1
+    if ($null -eq $certificate) {
+        throw "证书存储中没有找到指纹为 $normalized 的证书。"
+    }
+    if (-not $certificate.HasPrivateKey) {
+        throw '指定证书没有可用的私钥，无法签名。'
+    }
+    if ($certificate.EnhancedKeyUsageList.ObjectId.Value -notcontains '1.3.6.1.5.5.7.3.3') {
+        throw '指定证书不包含 Code Signing 扩展密钥用途。'
+    }
+    $now = Get-Date
+    if ($now -lt $certificate.NotBefore -or $now -gt $certificate.NotAfter) {
+        throw "指定证书当前不在有效期内（$($certificate.NotBefore) - $($certificate.NotAfter)）。"
+    }
+    return $normalized
+}
+
+function Invoke-AuthenticodeSign {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+        [Parameter(Mandatory = $true)]
+        [string]$ToolPath,
+        [Parameter(Mandatory = $true)]
+        [string]$Thumbprint,
+        [Parameter(Mandatory = $true)]
+        [string]$TimestampServer
+    )
+
+    & $ToolPath sign `
+        /sha1 $Thumbprint `
+        /fd SHA256 `
+        /td SHA256 `
+        /tr $TimestampServer `
+        /d 'AISky 桌面气象平台' `
+        $Path
+    if ($LASTEXITCODE -ne 0) {
+        throw "代码签名失败：$Path"
+    }
+    & $ToolPath verify /pa /all /tw $Path
+    if ($LASTEXITCODE -ne 0) {
+        throw "代码签名验证失败：$Path"
+    }
+}
+
+function Assert-AuthenticodeSignature {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+        [Parameter(Mandatory = $true)]
+        [string]$ToolPath
+    )
+
+    & $ToolPath verify /pa /all /tw $Path
+    if ($LASTEXITCODE -ne 0) {
+        throw "代码签名验证失败：$Path"
+    }
+}
+
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $workspaceRoot = (Resolve-Path (Join-Path $projectRoot '..')).Path
 $appProject = Join-Path $projectRoot 'AISky.Desktop.csproj'
@@ -35,6 +130,24 @@ $hashPath = "$archivePath.sha256"
 $installerScript = Join-Path $workspaceRoot 'installer\AISky.iss'
 $installerPath = Join-Path $OutputDirectory 'AISky-Setup-win-x64.exe'
 $installerHashPath = "$installerPath.sha256"
+$signingEnabled = -not [string]::IsNullOrWhiteSpace($SigningCertificateThumbprint)
+$normalizedSigningThumbprint = ''
+if ($Upload -and -not $signingEnabled -and -not $AllowUnsignedRelease) {
+    throw @'
+正式上传默认要求可信 Authenticode 签名。
+请提供 -SigningCertificateThumbprint；若明确接受 SmartScreen 的未知发布者提示，
+可显式使用 -AllowUnsignedRelease。
+'@
+}
+if ($signingEnabled) {
+    $normalizedSigningThumbprint = Assert-CodeSigningCertificate $SigningCertificateThumbprint
+    $SignToolPath = Resolve-CodeSigningTool $SignToolPath
+    $timestampUri = $null
+    if (-not [Uri]::TryCreate($TimestampUrl, [UriKind]::Absolute, [ref]$timestampUri) `
+        -or $timestampUri.Scheme -notin @('http', 'https')) {
+        throw 'TimestampUrl 必须是有效的 HTTP(S) 绝对 URL。'
+    }
+}
 
 if (Test-Path -LiteralPath $OutputDirectory) {
     throw "输出目录已存在：$OutputDirectory`n为避免覆盖旧版本，请更换版本号或输出目录。"
@@ -188,6 +301,20 @@ if (-not [string]::IsNullOrWhiteSpace($Repository)) {
     $config | ConvertTo-Json | Set-Content -LiteralPath $configPath -Encoding UTF8
 }
 
+if ($signingEnabled) {
+    Write-Host '正在签名 AISky 主程序和更新助手...'
+    Invoke-AuthenticodeSign `
+        -Path (Join-Path $stageDirectory 'AISky.Desktop.exe') `
+        -ToolPath $SignToolPath `
+        -Thumbprint $normalizedSigningThumbprint `
+        -TimestampServer $TimestampUrl
+    Invoke-AuthenticodeSign `
+        -Path (Join-Path $stageDirectory 'AISky.Updater.exe') `
+        -ToolPath $SignToolPath `
+        -Thumbprint $normalizedSigningThumbprint `
+        -TimestampServer $TimestampUrl
+}
+
 Compress-Archive -Path (Join-Path $stageDirectory '*') -DestinationPath $archivePath
 $hash = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
 Set-Content -LiteralPath $hashPath -Value "sha256:$hash  AISky-Desktop-win-x64.zip" -Encoding ASCII
@@ -220,17 +347,30 @@ if (-not $SkipInstaller) {
     }
 
     Write-Host "正在生成每用户安装器..."
-    & $InstallerCompilerPath `
-        '/Qp' `
-        "/DMyAppVersion=$Version" `
-        "/DSourceDir=$stageDirectory" `
-        "/DOutputDir=$OutputDirectory" `
-        $installerScript
+    $installerCompilerArguments = @(
+        '/Qp',
+        "/DMyAppVersion=$Version",
+        "/DSourceDir=$stageDirectory",
+        "/DOutputDir=$OutputDirectory"
+    )
+    if ($signingEnabled) {
+        $innoSignCommand =
+            "`"$SignToolPath`" sign /sha1 $normalizedSigningThumbprint " +
+            "/fd SHA256 /td SHA256 /tr `"$TimestampUrl`" " +
+            "/d `"AISky 桌面气象平台`" `$f"
+        $installerCompilerArguments += '/DSigningEnabled=1'
+        $installerCompilerArguments += "/Saisky=$innoSignCommand"
+    }
+    $installerCompilerArguments += $installerScript
+    & $InstallerCompilerPath @installerCompilerArguments
     if ($LASTEXITCODE -ne 0) {
         throw 'AISky 安装器生成失败。'
     }
     if (-not (Test-Path -LiteralPath $installerPath)) {
         throw "安装器编译成功，但没有找到输出：$installerPath"
+    }
+    if ($signingEnabled) {
+        Assert-AuthenticodeSignature -Path $installerPath -ToolPath $SignToolPath
     }
     $installerHash = (Get-FileHash -LiteralPath $installerPath -Algorithm SHA256).Hash.ToLowerInvariant()
     Set-Content -LiteralPath $installerHashPath `

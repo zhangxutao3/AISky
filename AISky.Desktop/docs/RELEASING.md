@@ -65,6 +65,22 @@ gh auth login
 
 正式发布前仍需省略 `-Quick`，执行全部同步、清理和容错测试。
 
+## Authenticode 签名
+
+公开发布默认要求代码签名证书。证书必须安装在当前用户或本地计算机的 Personal
+证书存储中，包含私钥和 Code Signing 扩展密钥用途。发布脚本会签名主程序、更新助手、
+安装程序和卸载程序，并使用 RFC 3161 时间戳，然后调用 SignTool 再次验证。
+
+```powershell
+.\scripts\Publish-AISky.ps1 `
+  -Version 0.8.5 `
+  -Repository zhangxutao3/AISky `
+  -SigningCertificateThumbprint 0123456789ABCDEF0123456789ABCDEF01234567
+```
+
+`-Upload` 在没有证书时会直接停止，防止误发“未知发布者”版本。如果确实要发布未签名
+测试版，必须显式传入 `-AllowUnsignedRelease`；该参数不应用于面向普通用户的正式版。
+
 ## 打包并发布到 GitHub Release
 
 先复制 `release-notes.example.md`，填写本次更新内容，然后运行：
