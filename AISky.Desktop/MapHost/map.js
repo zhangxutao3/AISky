@@ -1509,17 +1509,30 @@ function animateWind(timestamp) {
 
     const strongWind = Math.max(0, Math.min(1, speed / 32));
     const alpha = 0.30 + strongWind * 0.36;
-    windContext.strokeStyle = `rgba(243, 255, 255, ${alpha})`;
     windContext.lineWidth = Math.max(
       1.05,
       (window.devicePixelRatio || 1) * (1.22 - strongWind * 0.18),
     );
+    const projectedTrail = particle.trail.map((coordinate) => [
+      ((coordinate[0] - view.left) / lonSpan) * width,
+      ((view.top - coordinate[1]) / latSpan) * height,
+    ]);
+    const tail = projectedTrail[0];
+    const head = projectedTrail.at(-1);
+    const trailGradient = windContext.createLinearGradient(
+      tail[0],
+      tail[1],
+      head[0] + 0.001,
+      head[1] + 0.001,
+    );
+    trailGradient.addColorStop(0, "rgba(205, 247, 250, 0)");
+    trailGradient.addColorStop(0.42, `rgba(224, 251, 253, ${alpha * 0.28})`);
+    trailGradient.addColorStop(1, `rgba(248, 255, 255, ${alpha})`);
+    windContext.strokeStyle = trailGradient;
     windContext.beginPath();
-    particle.trail.forEach((coordinate, index) => {
-      const trailX = ((coordinate[0] - view.left) / lonSpan) * width;
-      const trailY = ((view.top - coordinate[1]) / latSpan) * height;
-      if (index === 0) windContext.moveTo(trailX, trailY);
-      else windContext.lineTo(trailX, trailY);
+    projectedTrail.forEach((coordinate, index) => {
+      if (index === 0) windContext.moveTo(coordinate[0], coordinate[1]);
+      else windContext.lineTo(coordinate[0], coordinate[1]);
     });
     windContext.stroke();
     particle.lon = nextLon;
