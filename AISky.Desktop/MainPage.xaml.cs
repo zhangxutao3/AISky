@@ -78,6 +78,7 @@ public sealed partial class MainPage : Page
             AutoSyncButton.IsChecked = App.Services.CurrentSettings.AutoSyncEnabled;
             _suppressDisplaySettings = true;
             WindAnimationToggle.IsOn = App.Services.CurrentSettings.ShowWindAnimation;
+            TyphoonPathToggle.IsOn = App.Services.CurrentSettings.ShowTyphoonPaths;
             _suppressDisplaySettings = false;
             _suppressAutoSync = false;
             DarkThemeToggle.IsChecked = RootLayout.ActualTheme == ElementTheme.Dark;
@@ -203,6 +204,22 @@ public sealed partial class MainPage : Page
                     {
                         SetPlaybackState(!_isPlaying);
                     }
+                    break;
+                case "typhoon-status":
+                    var status = root.TryGetProperty("status", out var statusNode)
+                        ? statusNode.GetString()
+                        : null;
+                    var trackCount = root.TryGetProperty("trackCount", out var countNode)
+                        ? countNode.GetInt32()
+                        : 0;
+                    TyphoonPathToggle.OnContent = status switch
+                    {
+                        "loading" => "正在识别",
+                        "ready" when trackCount > 0 => $"{trackCount} 条路径",
+                        "ready" => "未识别到",
+                        "error" => "识别失败",
+                        _ => "分析本地模式",
+                    };
                     break;
             }
         }
@@ -685,6 +702,21 @@ public sealed partial class MainPage : Page
 
         await App.Services.UpdateSettingsAsync(
             App.Services.CurrentSettings with { ShowWindAnimation = WindAnimationToggle.IsOn });
+        SendDisplayOptionsToMap();
+    }
+
+    private async void TyphoonPathToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_suppressDisplaySettings)
+        {
+            return;
+        }
+
+        await App.Services.UpdateSettingsAsync(
+            App.Services.CurrentSettings with { ShowTyphoonPaths = TyphoonPathToggle.IsOn });
+        TyphoonPathToggle.OnContent = TyphoonPathToggle.IsOn
+            ? "正在识别"
+            : "分析本地模式";
         SendDisplayOptionsToMap();
     }
 
@@ -1455,7 +1487,7 @@ public sealed partial class MainPage : Page
             ? _currentForecastRuns[(_currentForecastIndex + 1) % _currentForecastRuns.Count]
             : null;
         var seriesKey =
-            $"{run.Model}|{run.InitKey}|{_currentForecastRuns.Count}|{_currentForecastRuns.FirstOrDefault()?.Id}|{_currentForecastRuns.LastOrDefault()?.Id}";
+            $"{run.Model}|{run.InitKey}|{_currentForecastRuns.Count}|{_currentForecastRuns.FirstOrDefault()?.Id}|{_currentForecastRuns.LastOrDefault()?.Id}|{TyphoonSeriesKey()}";
         if (!forceFull && string.Equals(_lastMapSeriesKey, seriesKey, StringComparison.Ordinal))
         {
             PostMapMessage(new
@@ -1475,6 +1507,7 @@ public sealed partial class MainPage : Page
             layer = selectedLayer,
             run = CreateMapRun(run),
             nextRun = nextRun is null ? null : CreateMapRun(nextRun),
+            typhoonModels = CreateTyphoonModelSeries(),
             series = _currentForecastRuns.Select(seriesRun => new
             {
                 id = seriesRun.Id,
@@ -1504,6 +1537,80 @@ public sealed partial class MainPage : Page
             }),
         });
     }
+
+    private object[] CreateTyphoonModelSeries()
+    {
+        var result = new List<object>();
+        foreach (var model in new[] { "AISky-Energy", "AISky-SDS" })
+        {
+            var initKey = _index.Runs
+                .Where(run => string.Equals(run.Model, model, StringComparison.Ordinal))
+                .Select(run => run.InitKey)
+                .Distinct(StringComparer.Ordinal)
+                .OrderDescending()
+                .FirstOrDefault();
+            if (string.IsNullOrWhiteSpace(initKey))
+            {
+                continue;
+            }
+
+            var runs = _index.Runs
+                .Where(run =>
+                    string.Equals(run.Model, model, StringComparison.Ordinal)
+                    && string.Equals(run.InitKey, initKey, StringComparison.Ordinal))
+                .OrderBy(run => run.LeadHours)
+                .Select(run =>
+                {
+                    var slp = run.Layers.FirstOrDefault(layer => layer.Id == "slp");
+                    var wind = run.Layers.FirstOrDefault(layer => layer.Id == "wind10");
+                    if (slp is null || wind is null
+                        || string.IsNullOrWhiteSpace(slp.Sample)
+                        || string.IsNullOrWhiteSpace(wind.Sample))
+                    {
+                        return null;
+                    }
+                    return (object)new
+                    {
+                        id = run.Id,
+                        forecastKey = run.ForecastKey,
+                        leadHours = run.LeadHours,
+                        grid = new
+                        {
+                            lat = GridExtent(run.Grid.Latitude),
+                            lon = GridExtent(run.Grid.Longitude),
+                        },
+                        slpSampleUrl = BuildDataUrl(slp.Sample),
+                        windSampleUrl = BuildDataUrl(wind.Sample),
+                    };
+                })
+                .Where(run => run is not null)
+                .Cast<object>()
+                .ToArray();
+            if (runs.Length < 3)
+            {
+                continue;
+            }
+            result.Add(new { model, initKey, runs });
+        }
+        return result.ToArray();
+    }
+
+    private string TyphoonSeriesKey() =>
+        string.Join(
+            "|",
+            new[] { "AISky-Energy", "AISky-SDS" }.Select(model =>
+            {
+                var runs = _index.Runs
+                    .Where(run => string.Equals(run.Model, model, StringComparison.Ordinal))
+                    .OrderByDescending(run => run.InitKey)
+                    .ThenBy(run => run.LeadHours)
+                    .ToList();
+                var latestInit = runs.FirstOrDefault()?.InitKey;
+                var latestRuns = runs
+                    .Where(run => string.Equals(run.InitKey, latestInit, StringComparison.Ordinal))
+                    .ToList();
+                return $"{model}:{latestInit}:{latestRuns.Count}:{latestRuns.LastOrDefault()?.Id}";
+            }));
 
     private static object CreateMapRun(ForecastRun run) =>
         new
@@ -1578,6 +1685,7 @@ public sealed partial class MainPage : Page
             showGrid = settings.ShowMapGrid,
             showPlaces = settings.ShowMapPlaces,
             windAnimation = settings.ShowWindAnimation,
+            typhoonPaths = settings.ShowTyphoonPaths,
             utcOffsetHours = _displayUtcOffsetHours,
         });
     }

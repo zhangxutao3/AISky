@@ -26,9 +26,16 @@ public sealed class JsonSettingsStore(AppPaths paths)
                 return defaults;
             }
 
-            await using var stream = File.OpenRead(paths.SettingsFile);
-            return await JsonSerializer.DeserializeAsync<AppSettings>(stream, SerializerOptions)
+            var json = await File.ReadAllTextAsync(paths.SettingsFile);
+            var settings = JsonSerializer.Deserialize<AppSettings>(json, SerializerOptions)
                 ?? new AppSettings();
+            using var document = JsonDocument.Parse(json);
+            if (!document.RootElement.TryGetProperty("showTyphoonPaths", out _))
+            {
+                settings = settings with { ShowTyphoonPaths = true };
+                await SaveCoreAsync(settings);
+            }
+            return settings;
         }
         finally
         {

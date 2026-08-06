@@ -18,5 +18,6 @@ public sealed record AppSettings
     public bool ShowMapGrid { get; init; } = true;
     public bool ShowMapPlaces { get; init; } = true;
     public bool ShowWindAnimation { get; init; } = true;
+    public bool ShowTyphoonPaths { get; init; } = true;
     public int DisplayUtcOffsetHours { get; init; }
 }

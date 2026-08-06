@@ -629,16 +629,26 @@
                     Style="{StaticResource CaptionTextBlockStyle}"
                     Text="颜色和值域随产品自动更新"
                     TextWrapping="Wrap" />
-                <ToggleSwitch
-                    x:Name="WindAnimationToggle"
+                <StackPanel
                     Grid.Row="4"
                     Margin="4,2,4,0"
-                    AutomationProperties.Name="切换风场流线"
-                    Header="风场流线"
-                    IsOn="True"
-                    OffContent="关闭"
-                    OnContent="开启"
-                    Toggled="WindAnimationToggle_Toggled" />
+                    Spacing="4">
+                    <ToggleSwitch
+                        x:Name="WindAnimationToggle"
+                        AutomationProperties.Name="切换风场流线"
+                        Header="风场流线"
+                        IsOn="True"
+                        OffContent="关闭"
+                        OnContent="开启"
+                        Toggled="WindAnimationToggle_Toggled" />
+                    <ToggleSwitch
+                        x:Name="TyphoonPathToggle"
+                        AutomationProperties.Name="切换模型模拟台风路径"
+                        Header="模型模拟台风路径"
+                        OffContent="关闭"
+                        OnContent="分析本地模式"
+                        Toggled="TyphoonPathToggle_Toggled" />
+                </StackPanel>
             </Grid>
         </Border>
 

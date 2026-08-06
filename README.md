@@ -3,6 +3,9 @@
 AISky 是用于展示本地 NetCDF 气象预报产品的 Windows 桌面可视化软件，
 基于 C#、WinUI 3 和 Windows App SDK 构建。
 
+0.9.0 新增 Energy / SDS 本地模式台风路径识别、强度分级、路径点详情，
+以及中国地区 24 小时和 48 小时台风警戒线。
+
 ## 下载
 
 普通用户请从仓库的 **Releases** 页面下载

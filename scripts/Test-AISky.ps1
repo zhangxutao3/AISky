@@ -47,6 +47,18 @@ try {
         }
     }
 
+    $node = Get-Command node -ErrorAction SilentlyContinue
+    if ($null -ne $node) {
+        Write-Host "Running typhoon-algorithm.test.js"
+        & $node.Source (Join-Path $repoRoot "tests\typhoon-algorithm.test.js")
+        if ($LASTEXITCODE -ne 0) {
+            throw "typhoon-algorithm.test.js failed."
+        }
+    }
+    elseif (-not $Quick) {
+        throw "Node.js is required for the typhoon path algorithm test."
+    }
+
     if ($Quick) {
         Write-Host "AISky quick data-pipeline test passed." -ForegroundColor Green
     }

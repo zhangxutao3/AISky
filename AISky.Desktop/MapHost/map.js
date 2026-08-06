@@ -2,6 +2,21 @@ const canvas = document.querySelector("#map");
 const context = canvas.getContext("2d", { alpha: false, desynchronized: true });
 const windCanvas = document.querySelector("#wind");
 const windContext = windCanvas.getContext("2d", { alpha: true, desynchronized: true });
+const typhoonHover = document.querySelector("#typhoonHover");
+const typhoonLegend = document.querySelector("#typhoonLegend");
+const typhoonLegendStatus = document.querySelector("#typhoonLegendStatus");
+const typhoonPanel = document.querySelector("#typhoonPanel");
+const typhoonClose = document.querySelector("#typhoonClose");
+const typhoonModel = document.querySelector("#typhoonModel");
+const typhoonName = document.querySelector("#typhoonName");
+const typhoonStrength = document.querySelector("#typhoonStrength");
+const typhoonStrengthDot = document.querySelector("#typhoonStrengthDot");
+const typhoonWind = document.querySelector("#typhoonWind");
+const typhoonConfidence = document.querySelector("#typhoonConfidence");
+const typhoonTime = document.querySelector("#typhoonTime");
+const typhoonLead = document.querySelector("#typhoonLead");
+const typhoonPressure = document.querySelector("#typhoonPressure");
+const typhoonLocation = document.querySelector("#typhoonLocation");
 const coordinateLabel = document.querySelector("#coordinates");
 const pointPanel = document.querySelector("#pointPanel");
 const pointClose = document.querySelector("#pointClose");
@@ -50,6 +65,7 @@ let fieldOpacity = 0.93;
 let showGrid = true;
 let showPlaces = true;
 let showWindAnimation = true;
+let showTyphoonPaths = false;
 let displayUtcOffsetHours = 0;
 let windField = null;
 let windParticles = [];
@@ -58,6 +74,36 @@ let windLastFrame = 0;
 let prefetchGeneration = 0;
 let lastViewportWidth = 0;
 let lastViewportHeight = 0;
+let typhoonModels = [];
+let typhoonTracks = [];
+let typhoonHitPoints = [];
+let selectedTyphoonPoint = null;
+let typhoonWorker = null;
+let typhoonRequestId = 0;
+let typhoonAnalysisKey = "";
+const typhoonTrackCache = new Map();
+
+const TYPHOON_MODEL_STYLES = {
+  "AISky-Energy": { color: "#ff7891", dash: [] },
+  "AISky-SDS": { color: "#45c9e9", dash: [9, 6] },
+};
+
+// Coordinates follow the current Central Meteorological Observatory map script:
+// https://typhoon.nmc.cn/js/typhoon/gis.js (checked 2026-08-06).
+const GUARD_LINE_24 = [
+  [126.993568, 34.005024],
+  [126.993568, 21.971252],
+  [118.995521, 17.96586],
+  [118.995521, 10.97105],
+  [113.018959, 4.48627],
+  [104.998939, -0.035506],
+];
+const GUARD_LINE_48 = [
+  [104.998939, -0.035506],
+  [119.962318, -0.035506],
+  [131.981361, 14.96886],
+  [131.981361, 33.959474],
+];
 
 function clamp(value, minimum, maximum) {
   return Math.max(minimum, Math.min(maximum, value));
@@ -269,6 +315,105 @@ function displayTimeZoneLabel() {
   return `UTC${displayUtcOffsetHours > 0 ? "+" : ""}${displayUtcOffsetHours}`;
 }
 
+function typhoonModelsKey(models) {
+  return (Array.isArray(models) ? models : [])
+    .map((model) => {
+      const runs = model.runs || [];
+      return `${model.model}:${model.initKey}:${runs.length}:${runs[0]?.id || ""}:${runs.at(-1)?.id || ""}`;
+    })
+    .join("|");
+}
+
+function reportTyphoonStatus(status, trackCount = 0, message = "") {
+  window.chrome?.webview?.postMessage({
+    type: "typhoon-status",
+    status,
+    trackCount,
+    message,
+  });
+}
+
+function ensureTyphoonWorker() {
+  if (typhoonWorker) return typhoonWorker;
+  typhoonWorker = new Worker("./typhoon-worker.js");
+  typhoonWorker.addEventListener("message", (event) => {
+    const message = event.data || {};
+    if (message.requestId !== typhoonRequestId) return;
+    if (message.type === "progress") {
+      typhoonLegendStatus.textContent =
+        `${String(message.model || "").replace("AISky-", "")} · ${message.completed}/${message.total}`;
+      return;
+    }
+    if (message.type === "result") {
+      typhoonTracks = Array.isArray(message.tracks) ? message.tracks : [];
+      typhoonTrackCache.set(typhoonAnalysisKey, typhoonTracks);
+      while (typhoonTrackCache.size > 4) {
+        typhoonTrackCache.delete(typhoonTrackCache.keys().next().value);
+      }
+      typhoonLegendStatus.textContent = typhoonTracks.length > 0
+        ? `${typhoonTracks.length} 条未来 72 小时模拟路径`
+        : "当前起报未识别到台风";
+      typhoonLegend.hidden = !showTyphoonPaths;
+      reportTyphoonStatus("ready", typhoonTracks.length);
+      requestRender();
+      return;
+    }
+    if (message.type === "error") {
+      typhoonTracks = [];
+      typhoonLegendStatus.textContent = "本地模式识别失败";
+      reportTyphoonStatus("error", 0, message.message || "");
+      requestRender();
+    }
+  });
+  typhoonWorker.addEventListener("error", (event) => {
+    typhoonTracks = [];
+    typhoonLegendStatus.textContent = "本地模式识别失败";
+    reportTyphoonStatus("error", 0, event.message || "");
+    requestRender();
+  });
+  return typhoonWorker;
+}
+
+function refreshTyphoonAnalysis() {
+  if (!showTyphoonPaths) {
+    typhoonLegend.hidden = true;
+    typhoonHover.hidden = true;
+    typhoonPanel.hidden = true;
+    selectedTyphoonPoint = null;
+    requestRender();
+    return;
+  }
+  typhoonLegend.hidden = false;
+  const key = typhoonModelsKey(typhoonModels);
+  if (!key) {
+    typhoonTracks = [];
+    typhoonLegendStatus.textContent = "两个模型均无可分析序列";
+    reportTyphoonStatus("ready", 0);
+    requestRender();
+    return;
+  }
+  if (typhoonTrackCache.has(key)) {
+    typhoonAnalysisKey = key;
+    typhoonTracks = typhoonTrackCache.get(key);
+    typhoonLegendStatus.textContent = typhoonTracks.length > 0
+      ? `${typhoonTracks.length} 条未来 72 小时模拟路径`
+      : "当前起报未识别到台风";
+    reportTyphoonStatus("ready", typhoonTracks.length);
+    requestRender();
+    return;
+  }
+  typhoonAnalysisKey = key;
+  typhoonTracks = [];
+  typhoonLegendStatus.textContent = "正在分析本地 SLP 与 WIND10";
+  reportTyphoonStatus("loading");
+  typhoonRequestId += 1;
+  ensureTyphoonWorker().postMessage({
+    requestId: typhoonRequestId,
+    models: typhoonModels,
+  });
+  requestRender();
+}
+
 async function loadSample(layer) {
   if (!layer?.sampleUrl) return null;
   if (sampleCache.has(layer.sampleUrl)) return sampleCache.get(layer.sampleUrl);
@@ -451,6 +596,8 @@ function updatePointCurrentReading() {
 
 async function showPointDetails(lon, lat) {
   const generation = ++pointGeneration;
+  typhoonPanel.hidden = true;
+  selectedTyphoonPoint = null;
   pointSelection = { lon, lat };
   pointSeriesData = [];
   pointPanel.hidden = false;
@@ -802,6 +949,272 @@ function drawCoastlines(width, height) {
   context.restore();
 }
 
+function traceCoordinateLine(points, width, height, longitudeOffset = 0) {
+  context.beginPath();
+  points.forEach((point, index) => {
+    const [x, y] = project(point[0] + longitudeOffset, point[1], width, height);
+    if (index === 0) context.moveTo(x, y);
+    else context.lineTo(x, y);
+  });
+}
+
+function traceSmoothCoordinateLine(points, width, height, longitudeOffset = 0) {
+  if (points.length < 2) return;
+  const projected = points.map((point) =>
+    project(point[0] + longitudeOffset, point[1], width, height));
+  context.beginPath();
+  context.moveTo(projected[0][0], projected[0][1]);
+  if (projected.length === 2) {
+    context.lineTo(projected[1][0], projected[1][1]);
+    return;
+  }
+  // A cardinal spline passes through every model centre while rounding the
+  // right-angle steps introduced by the lower-resolution analysis grid.
+  const tension = 0.72;
+  for (let index = 0; index < projected.length - 1; index += 1) {
+    const first = projected[Math.max(0, index - 1)];
+    const start = projected[index];
+    const end = projected[index + 1];
+    const last = projected[Math.min(projected.length - 1, index + 2)];
+    const firstControl = [
+      start[0] + (end[0] - first[0]) * tension / 6,
+      start[1] + (end[1] - first[1]) * tension / 6,
+    ];
+    const secondControl = [
+      end[0] - (last[0] - start[0]) * tension / 6,
+      end[1] - (last[1] - start[1]) * tension / 6,
+    ];
+    context.bezierCurveTo(
+      firstControl[0],
+      firstControl[1],
+      secondControl[0],
+      secondControl[1],
+      end[0],
+      end[1],
+    );
+  }
+}
+
+function drawRoundedLabel(text, x, y, color, width, height) {
+  const ratio = window.devicePixelRatio || 1;
+  context.save();
+  context.font = `650 ${11 * ratio}px "Segoe UI Variable", "Microsoft YaHei UI"`;
+  const paddingX = 7 * ratio;
+  const labelHeight = 23 * ratio;
+  const labelWidth = context.measureText(text).width + paddingX * 2;
+  const left = clamp(x - labelWidth / 2, 5 * ratio, width - labelWidth - 5 * ratio);
+  const top = clamp(y - labelHeight / 2, 5 * ratio, height - labelHeight - 5 * ratio);
+  context.beginPath();
+  context.roundRect(left, top, labelWidth, labelHeight, 7 * ratio);
+  context.fillStyle = mapTheme === "dark"
+    ? "rgba(18, 39, 47, 0.90)"
+    : "rgba(249, 253, 253, 0.91)";
+  context.fill();
+  context.strokeStyle = color;
+  context.lineWidth = ratio;
+  context.stroke();
+  context.fillStyle = mapTheme === "dark" ? "#effafa" : "#24444d";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText(text, left + labelWidth / 2, top + labelHeight / 2);
+  context.restore();
+}
+
+function drawGuardLines(width, height, firstCopy, lastCopy) {
+  const ratio = window.devicePixelRatio || 1;
+  const guardColor = mapTheme === "dark" ? "#f8d66d" : "#d9a51c";
+  const haloColor = mapTheme === "dark"
+    ? "rgba(20, 34, 39, 0.70)"
+    : "rgba(255, 255, 255, 0.82)";
+  context.save();
+  context.lineJoin = "round";
+  context.lineCap = "round";
+  for (let copy = firstCopy; copy <= lastCopy; copy += 1) {
+    const offset = copy * 360;
+    for (const [points, dashed] of [[GUARD_LINE_24, false], [GUARD_LINE_48, true]]) {
+      context.setLineDash(dashed ? [7 * ratio, 6 * ratio] : []);
+      traceCoordinateLine(points, width, height, offset);
+      context.strokeStyle = haloColor;
+      context.lineWidth = 4.4 * ratio;
+      context.stroke();
+      traceCoordinateLine(points, width, height, offset);
+      context.strokeStyle = guardColor;
+      context.lineWidth = 1.7 * ratio;
+      context.stroke();
+    }
+    const label24 = project(126.993568 + offset, 29.5, width, height);
+    const label48 = project(131.981361 + offset, 27.5, width, height);
+    if (label24[0] > -120 * ratio && label24[0] < width + 120 * ratio) {
+      drawRoundedLabel("24 小时警戒线", label24[0] - 66 * ratio, label24[1], guardColor, width, height);
+    }
+    if (label48[0] > -120 * ratio && label48[0] < width + 120 * ratio) {
+      drawRoundedLabel("48 小时警戒线", label48[0] + 66 * ratio, label48[1], guardColor, width, height);
+    }
+  }
+  context.restore();
+}
+
+function drawTrackPath(points, width, height, longitudeOffset, style) {
+  if (points.length < 2) return;
+  const ratio = window.devicePixelRatio || 1;
+  context.save();
+  context.lineJoin = "round";
+  context.lineCap = "round";
+  context.setLineDash(style.dash.map((value) => value * ratio));
+  traceSmoothCoordinateLine(
+    points.map((point) => [point.lon, point.lat]),
+    width,
+    height,
+    longitudeOffset,
+  );
+  context.strokeStyle = mapTheme === "dark"
+    ? "rgba(5, 23, 30, 0.76)"
+    : "rgba(255, 255, 255, 0.86)";
+  context.lineWidth = 7 * ratio;
+  context.stroke();
+  traceSmoothCoordinateLine(
+    points.map((point) => [point.lon, point.lat]),
+    width,
+    height,
+    longitudeOffset,
+  );
+  context.strokeStyle = style.color;
+  context.globalAlpha = 0.90;
+  context.lineWidth = 4.2 * ratio;
+  context.shadowColor = style.color;
+  context.shadowBlur = 7 * ratio;
+  context.stroke();
+  context.shadowBlur = 0;
+  context.globalAlpha = 1;
+  context.setLineDash([]);
+  context.restore();
+}
+
+function drawTyphoonPaths(width, height) {
+  typhoonHitPoints = [];
+  if (!showTyphoonPaths) return;
+  const firstCopy = Math.floor((view.left + 180) / 360) - 1;
+  const lastCopy = Math.floor((view.right + 180) / 360) + 1;
+  const ratio = window.devicePixelRatio || 1;
+  const longitudeSpan = view.right - view.left;
+  const pointInterval = longitudeSpan <= 40 ? 1 : longitudeSpan <= 80 ? 2 : 4;
+  drawGuardLines(width, height, firstCopy, lastCopy);
+
+  for (const track of typhoonTracks) {
+    const style = TYPHOON_MODEL_STYLES[track.model]
+      || { color: "#50bfd0", dash: [] };
+    for (let copy = firstCopy; copy <= lastCopy; copy += 1) {
+      const longitudeOffset = copy * 360;
+      drawTrackPath(track.points, width, height, longitudeOffset, style);
+      for (let pointIndex = 0; pointIndex < track.points.length; pointIndex += 1) {
+        const point = track.points[pointIndex];
+        const isActive = Math.abs(Number(point.leadHours) - activeLead) < 1.5;
+        const isSelected = selectedTyphoonPoint
+          && selectedTyphoonPoint.track.id === track.id
+          && selectedTyphoonPoint.point.forecastKey === point.forecastKey;
+        if (pointIndex % pointInterval !== 0
+          && pointIndex !== track.points.length - 1
+          && !isActive
+          && !isSelected) {
+          continue;
+        }
+        const [x, y] = project(point.lon + longitudeOffset, point.lat, width, height);
+        if (x < -18 * ratio || x > width + 18 * ratio
+          || y < -18 * ratio || y > height + 18 * ratio) {
+          continue;
+        }
+        const radius = (isActive || isSelected ? 6.2 : 4.2) * ratio;
+        context.save();
+        context.beginPath();
+        context.arc(x, y, radius, 0, Math.PI * 2);
+        context.fillStyle = point.intensity?.color || style.color;
+        context.shadowColor = point.intensity?.color || style.color;
+        context.shadowBlur = (isActive ? 10 : 4) * ratio;
+        context.fill();
+        context.shadowBlur = 0;
+        context.lineWidth = (isActive || isSelected ? 2.5 : 1.7) * ratio;
+        context.strokeStyle = mapTheme === "dark" ? "#edfafa" : "#ffffff";
+        context.stroke();
+        if (isActive || isSelected) {
+          context.beginPath();
+          context.arc(x, y, 9.5 * ratio, 0, Math.PI * 2);
+          context.strokeStyle = style.color;
+          context.globalAlpha = 0.75;
+          context.lineWidth = 1.4 * ratio;
+          context.stroke();
+        }
+        context.restore();
+        typhoonHitPoints.push({ x, y, point, track });
+      }
+      const lastPoint = track.points.at(-1);
+      if (lastPoint && longitudeSpan <= 90) {
+        const [labelX, labelY] = project(
+          lastPoint.lon + longitudeOffset,
+          lastPoint.lat,
+          width,
+          height,
+        );
+        if (labelX > -100 * ratio && labelX < width + 100 * ratio
+          && labelY > -40 * ratio && labelY < height + 40 * ratio) {
+          drawRoundedLabel(
+            track.name,
+            labelX + 12 * ratio,
+            labelY - 19 * ratio,
+            style.color,
+            width,
+            height,
+          );
+        }
+      }
+    }
+  }
+}
+
+function findTyphoonHit(offsetX, offsetY) {
+  if (!showTyphoonPaths || typhoonHitPoints.length === 0) return null;
+  const ratio = canvas.width / Math.max(1, canvas.clientWidth);
+  const x = offsetX * ratio;
+  const y = offsetY * ratio;
+  let closest = null;
+  let distance = 15 * ratio;
+  for (const item of typhoonHitPoints) {
+    const candidate = Math.hypot(item.x - x, item.y - y);
+    if (candidate < distance) {
+      closest = item;
+      distance = candidate;
+    }
+  }
+  return closest;
+}
+
+function formatCoordinate(value, positive, negative) {
+  const suffix = value < 0 ? negative : positive;
+  return `${Math.abs(value).toFixed(2)}°${suffix}`;
+}
+
+function showTyphoonDetails(hit) {
+  if (!hit) return;
+  selectedTyphoonPoint = hit;
+  pointGeneration += 1;
+  pointPanel.hidden = true;
+  pointSelection = null;
+  pointSeriesData = [];
+  const { point, track } = hit;
+  typhoonPanel.hidden = false;
+  typhoonModel.textContent = `${track.model} · 起报 ${formatForecastKey(track.initKey)} ${displayTimeZoneLabel()}`;
+  typhoonName.textContent = track.name;
+  typhoonStrength.textContent = point.intensity?.label || "热带气旋";
+  typhoonStrengthDot.style.background = point.intensity?.color || "#63d6c7";
+  typhoonWind.textContent = `${point.windSpeed.toFixed(1)} m/s · ${point.intensity?.code || "TC"}`;
+  typhoonConfidence.textContent = `${track.confidence}%`;
+  typhoonTime.textContent = `${formatForecastKey(point.forecastKey)} ${displayTimeZoneLabel()}`;
+  typhoonLead.textContent = `+${point.leadHours}h`;
+  typhoonPressure.textContent = `${point.pressure.toFixed(1)} hPa`;
+  typhoonLocation.textContent =
+    `${formatCoordinate(point.lon, "E", "W")} · ${formatCoordinate(point.lat, "N", "S")}`;
+  requestRender();
+}
+
 function drawPointMarker(width, height) {
   if (!pointSelection) return;
   const viewCenter = (view.left + view.right) / 2;
@@ -1033,6 +1446,7 @@ async function render() {
     }
     drawGrid(width, height);
     drawCoastlines(width, height);
+    drawTyphoonPaths(width, height);
     drawPointMarker(width, height);
     void refreshWindAnimation(generation);
   } catch (error) {
@@ -1040,6 +1454,7 @@ async function render() {
     drawEmptyField(width, height);
     drawGrid(width, height);
     drawCoastlines(width, height);
+    drawTyphoonPaths(width, height);
     drawPointMarker(width, height);
     void refreshWindAnimation(generation);
     window.chrome?.webview?.postMessage({ type: "map-error", message: String(error.message || error) });
@@ -1127,11 +1542,32 @@ canvas.addEventListener("pointermove", (event) => {
     : `　${value.toFixed(2)} ${activeField.layer.unit || ""}`.trimEnd();
   coordinateLabel.textContent =
     `经度 ${lon.toFixed(2)}　纬度 ${lat.toFixed(2)}${valueText}`;
+
+  const typhoonHit = dragState?.moved ? null : findTyphoonHit(event.offsetX, event.offsetY);
+  canvas.style.cursor = typhoonHit ? "pointer" : dragState ? "grabbing" : "grab";
+  if (typhoonHit) {
+    const { point, track } = typhoonHit;
+    typhoonHover.hidden = false;
+    typhoonHover.style.left = `${event.offsetX}px`;
+    typhoonHover.style.top = `${event.offsetY}px`;
+    typhoonHover.innerHTML =
+      `<strong>${track.name} · ${point.intensity?.label || "热带气旋"}</strong>`
+      + `${formatForecastKey(point.forecastKey)} ${displayTimeZoneLabel()} · `
+      + `${point.pressure.toFixed(1)} hPa · ${point.windSpeed.toFixed(1)} m/s`;
+  } else {
+    typhoonHover.hidden = true;
+  }
 });
 
 canvas.addEventListener("click", (event) => {
   if (suppressMapClick) {
     suppressMapClick = false;
+    return;
+  }
+  const typhoonHit = findTyphoonHit(event.offsetX, event.offsetY);
+  if (typhoonHit) {
+    typhoonHover.hidden = true;
+    showTyphoonDetails(typhoonHit);
     return;
   }
   const [lon, lat] = unproject(event.offsetX, event.offsetY);
@@ -1148,7 +1584,18 @@ pointClose.addEventListener("click", () => {
   canvas.focus();
 });
 
+typhoonClose.addEventListener("click", () => {
+  typhoonPanel.hidden = true;
+  selectedTyphoonPoint = null;
+  requestRender();
+  canvas.focus();
+});
+
 document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !typhoonPanel.hidden) {
+    typhoonClose.click();
+    return;
+  }
   if (event.key === "Escape" && !pointPanel.hidden) {
     pointClose.click();
     return;
@@ -1195,8 +1642,10 @@ window.chrome?.webview?.addEventListener("message", (event) => {
   if (message.type === "set-data") {
     activeRun = message.run || null;
     forecastSeries = Array.isArray(message.series) ? message.series : [];
+    typhoonModels = Array.isArray(message.typhoonModels) ? message.typhoonModels : [];
     activeLayerId = message.layer || activeRun?.layers?.[0]?.id || "";
     activeLead = Number(activeRun?.leadHours ?? message.lead ?? 0);
+    refreshTyphoonAnalysis();
     void render().then(() => {
       scheduleFramePrefetch(message.nextRun, activeLayerId);
       if (pointSelection && !pointPanel.hidden) {
@@ -1227,13 +1676,22 @@ window.chrome?.webview?.addEventListener("message", (event) => {
   } else if (message.type === "set-theme") {
     mapTheme = message.theme === "dark" ? "dark" : "light";
     document.documentElement.style.colorScheme = mapTheme;
+    document.documentElement.dataset.theme = mapTheme;
     void render();
   } else if (message.type === "set-display") {
     fieldOpacity = Math.max(0.35, Math.min(1, Number(message.opacity) || 0.93));
     showGrid = message.showGrid !== false;
     showPlaces = message.showPlaces !== false;
     showWindAnimation = message.windAnimation !== false;
+    const nextTyphoonVisibility = message.typhoonPaths === true;
+    const typhoonVisibilityChanged = showTyphoonPaths !== nextTyphoonVisibility;
+    showTyphoonPaths = nextTyphoonVisibility;
     displayUtcOffsetHours = Math.max(-12, Math.min(14, Number(message.utcOffsetHours) || 0));
+    if (typhoonVisibilityChanged) {
+      refreshTyphoonAnalysis();
+    } else if (selectedTyphoonPoint && !typhoonPanel.hidden) {
+      showTyphoonDetails(selectedTyphoonPoint);
+    }
     void render();
     updatePointCurrentReading();
   }
