@@ -67,6 +67,20 @@ public sealed class AppServices
         }
         BackgroundSync.ApplySettings(CurrentSettings);
         await Log.WriteAsync("INFO", $"AISky Desktop initialized at {Paths.Root}");
+        try
+        {
+            var cleanupMessage = DataLocationStore.TryDeletePreviousRoot(Paths.Root);
+            if (!string.IsNullOrWhiteSpace(cleanupMessage))
+            {
+                await Log.WriteAsync("INFO", cleanupMessage);
+            }
+        }
+        catch (Exception exception)
+        {
+            await Log.WriteAsync(
+                "WARN",
+                $"Previous data root cleanup will be retried later: {exception.Message}");
+        }
     }
 
     public async Task UpdateSettingsAsync(AppSettings settings)
@@ -75,5 +89,21 @@ public sealed class AppServices
         CurrentSettings = settings;
         await Settings.SaveAsync(settings);
         BackgroundSync.ApplySettings(settings);
+    }
+
+    public async Task PrepareDataRootMigrationAsync(
+        string targetRoot,
+        IProgress<string>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        await BackgroundSync.StopForMigrationAsync(cancellationToken);
+        await DataLocationStore.PrepareMigrationAsync(
+            Paths.Root,
+            targetRoot,
+            progress,
+            cancellationToken);
+        await Log.WriteAsync(
+            "INFO",
+            $"Data root migration prepared: {Paths.Root} -> {Path.GetFullPath(targetRoot)}");
     }
 }

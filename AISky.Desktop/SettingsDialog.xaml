@@ -93,6 +93,44 @@
                 <TextBlock
                     Margin="2,0"
                     Style="{StaticResource SubtitleTextBlockStyle}"
+                    Text="数据存储" />
+                <TextBlock
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    Text="默认保存在软件目录的 AISkyData 文件夹。切换后会迁移预报数据并自动重新启动。"
+                    TextWrapping="Wrap" />
+                <Grid ColumnSpacing="10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox
+                        x:Name="DataRootPathTextBox"
+                        AutomationProperties.Name="AISky 数据存放目录"
+                        Header="当前数据目录"
+                        IsReadOnly="True" />
+                    <Button
+                        Grid.Column="1"
+                        Margin="0,24,0,0"
+                        MinWidth="100"
+                        VerticalAlignment="Top"
+                        AutomationProperties.Name="选择 AISky 数据目录"
+                        Click="SelectDataRootButton_Click"
+                        Content="选择文件夹" />
+                </Grid>
+                <InfoBar
+                    x:Name="DataRootInfo"
+                    IsClosable="True"
+                    IsOpen="False"
+                    Severity="Informational" />
+            </StackPanel>
+
+            <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+            <StackPanel Spacing="12">
+                <TextBlock
+                    Margin="2,0"
+                    Style="{StaticResource SubtitleTextBlockStyle}"
                     Text="自动同步" />
                 <ToggleSwitch
                     x:Name="AutoSyncToggle"
@@ -139,10 +177,10 @@
                     OnContent="在通知区启动" />
                 <ToggleSwitch
                     x:Name="CheckUpdatesToggle"
-                    AutomationProperties.Name="启动时自动检查软件更新"
-                    Header="启动时检查软件更新"
+                    AutomationProperties.Name="每六小时自动检查软件更新"
+                    Header="每 6 小时后台检查软件更新"
                     OffContent="仅手动检查"
-                    OnContent="静默检查" />
+                    OnContent="发现后提醒" />
             </StackPanel>
 
             <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
@@ -241,7 +279,7 @@
                     VerticalAlignment="Center"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     Style="{StaticResource CaptionTextBlockStyle}"
-                    Text="版本 0.8.5" />
+                    Text="版本 0.8.6" />
             </Grid>
         </StackPanel>
     </ScrollViewer>

@@ -1,5 +1,6 @@
 using AISky_Desktop.Infrastructure;
 using Microsoft.UI.Xaml;
+using System.Diagnostics;
 
 namespace AISky_Desktop;
 
@@ -24,6 +25,7 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        WaitForRestartSourceIfRequested();
         _instanceMutex = new Mutex(initiallyOwned: true, InstanceMutexName, out var isFirstInstance);
         if (!isFirstInstance)
         {
@@ -43,6 +45,31 @@ public partial class App : Application
             .Any(argument => argument.Equals("--background", StringComparison.OrdinalIgnoreCase));
         _window = new MainWindow(startInTray);
         _window.Activate();
+    }
+
+    private static void WaitForRestartSourceIfRequested()
+    {
+        const string prefix = "--restart-after-pid=";
+        var argument = Environment.GetCommandLineArgs()
+            .FirstOrDefault(item =>
+                item.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+        if (argument is null
+            || !int.TryParse(argument[prefix.Length..], out var processId)
+            || processId <= 0
+            || processId == Environment.ProcessId)
+        {
+            return;
+        }
+
+        try
+        {
+            using var process = Process.GetProcessById(processId);
+            process.WaitForExit(60_000);
+        }
+        catch (ArgumentException)
+        {
+            // The source instance has already exited.
+        }
     }
 
     private void StartActivationListener()

@@ -2,16 +2,19 @@ using AISky_Desktop.Core;
 using AISky_Desktop.Infrastructure;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Windows.Storage.Pickers;
 
 namespace AISky_Desktop;
 
 public sealed partial class SettingsDialog : ContentDialog
 {
     private readonly AppSettings _initialSettings;
+    private string _selectedDataRoot;
 
     public SettingsDialog(AppSettings settings)
     {
         _initialSettings = settings;
+        _selectedDataRoot = App.Services.Paths.Root;
         InitializeComponent();
         AutoSyncToggle.IsOn = settings.AutoSyncEnabled;
         KeepInTrayToggle.IsOn = settings.KeepRunningInTray;
@@ -25,7 +28,14 @@ public sealed partial class SettingsDialog : ContentDialog
         ApplicationVersionText.Text = $"版本 {VersionInfo.CurrentVersion}";
         SelectByTag(ForecastHoursPicker, settings.AutoSyncForecastHours.ToString());
         SelectRetention(settings.CacheRetentionDays);
+        DataRootPathTextBox.Text = _selectedDataRoot;
     }
+
+    public string SelectedDataRoot => _selectedDataRoot;
+    public bool DataRootChanged => !string.Equals(
+        Path.GetFullPath(_selectedDataRoot),
+        Path.GetFullPath(App.Services.Paths.Root),
+        StringComparison.OrdinalIgnoreCase);
 
     public AppSettings SelectedSettings => _initialSettings with
     {
@@ -52,6 +62,48 @@ public sealed partial class SettingsDialog : ContentDialog
     private async void SettingsDialog_Loaded(object sender, RoutedEventArgs e)
     {
         CacheSizeText.Text = await Task.Run(CalculateCacheSize);
+    }
+
+    private async void SelectDataRootButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var picker = new FolderPicker
+            {
+                SuggestedStartLocation = PickerLocationId.ComputerFolder,
+                CommitButtonText = "选择此文件夹",
+            };
+            picker.FileTypeFilter.Add("*");
+            if ((Application.Current as App)?.MainWindow is not { } window)
+            {
+                throw new InvalidOperationException("主窗口尚未就绪。");
+            }
+            var windowHandle = WinRT.Interop.WindowNative.GetWindowHandle(window);
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, windowHandle);
+            var folder = await picker.PickSingleFolderAsync();
+            if (folder is null)
+            {
+                return;
+            }
+
+            var selectedPath = Path.GetFullPath(folder.Path);
+            if (Directory.EnumerateFileSystemEntries(selectedPath).Any())
+            {
+                selectedPath = Path.Combine(selectedPath, "AISkyData");
+            }
+            _selectedDataRoot = selectedPath;
+            DataRootPathTextBox.Text = _selectedDataRoot;
+            DataRootInfo.Severity = InfoBarSeverity.Informational;
+            DataRootInfo.Message =
+                "保存设置后，AISky 会迁移全部数据并自动重新启动。";
+            DataRootInfo.IsOpen = true;
+        }
+        catch (Exception exception)
+        {
+            DataRootInfo.Severity = InfoBarSeverity.Error;
+            DataRootInfo.Message = $"无法选择数据目录：{exception.Message}";
+            DataRootInfo.IsOpen = true;
+        }
     }
 
     private void SelectRetention(int days)

@@ -433,7 +433,14 @@
                             FontWeight="SemiBold"
                             Text="等待预报产品"
                             TextTrimming="CharacterEllipsis" />
-                        <Grid Grid.Row="1" ColumnSpacing="5">
+                        <Grid
+                            x:Name="ModelStatusLine"
+                            Grid.Row="1"
+                            Height="16"
+                            ColumnSpacing="5">
+                            <Grid.RenderTransform>
+                                <TranslateTransform />
+                            </Grid.RenderTransform>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
@@ -707,9 +714,20 @@
                     x:Name="PlayButton"
                     AutomationProperties.Name="播放时间序列"
                     Click="PlayButton_Click"
-                    Content="&#xE768;"
                     Style="{StaticResource AISkyPlayButtonStyle}"
-                    ToolTipService.ToolTip="播放预报时间序列" />
+                    ToolTipService.ToolTip="播放预报时间序列">
+                    <Grid Width="22" Height="22">
+                        <PathIcon
+                            x:Name="PlaybackPlayIcon"
+                            Data="M 5,3 L 20,11 L 5,19 Z"
+                            Foreground="{Binding Foreground, ElementName=PlayButton}" />
+                        <PathIcon
+                            x:Name="PlaybackPauseIcon"
+                            Data="M 4,3 H9 V19 H4 Z M13,3 H18 V19 H13 Z"
+                            Foreground="{Binding Foreground, ElementName=PlayButton}"
+                            Visibility="Collapsed" />
+                    </Grid>
+                </Button>
                 <StackPanel
                     x:Name="TimelineCaption"
                     Grid.Column="1"
@@ -1108,6 +1126,81 @@
                     </Grid>
                 </Border>
             </ScrollViewer>
+        </Grid>
+
+        <Grid
+            x:Name="StartupCover"
+            AutomationProperties.Name="AISky 正在启动"
+            IsHitTestVisible="True">
+            <Grid.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                    <GradientStop Offset="0" Color="#FF061A29" />
+                    <GradientStop Offset="0.48" Color="#FF0A3443" />
+                    <GradientStop Offset="1" Color="#FF0B5D66" />
+                </LinearGradientBrush>
+            </Grid.Background>
+            <Ellipse
+                Width="760"
+                Height="760"
+                Margin="-280,0,0,-380"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Bottom"
+                IsHitTestVisible="False"
+                Stroke="#2857D7D0"
+                StrokeThickness="2" />
+            <Ellipse
+                Width="560"
+                Height="560"
+                Margin="0,-300,-160,0"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Top"
+                IsHitTestVisible="False"
+                Stroke="#3277E5D6"
+                StrokeThickness="2" />
+            <StackPanel
+                Width="320"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Spacing="20">
+                <Border
+                    Width="104"
+                    Height="104"
+                    HorizontalAlignment="Center"
+                    Background="White"
+                    CornerRadius="28">
+                    <Image
+                        Margin="4"
+                        AutomationProperties.Name="AISky 标志"
+                        Source="ms-appx:///Assets/AppIcon.png"
+                        Stretch="Uniform" />
+                </Border>
+                <StackPanel HorizontalAlignment="Center" Spacing="4">
+                    <TextBlock
+                        HorizontalAlignment="Center"
+                        Foreground="White"
+                        FontSize="42"
+                        FontWeight="SemiBold"
+                        Text="AISky" />
+                    <TextBlock
+                        HorizontalAlignment="Center"
+                        Foreground="{StaticResource AISkyDarkMutedTextBrush}"
+                        FontSize="16"
+                        Text="智慧气象桌面平台" />
+                </StackPanel>
+                <StackPanel Spacing="9">
+                    <ProgressBar
+                        x:Name="StartupProgressBar"
+                        Height="4"
+                        Foreground="{StaticResource AISkyAccentBrightBrush}"
+                        IsIndeterminate="True" />
+                    <TextBlock
+                        x:Name="StartupStatusText"
+                        HorizontalAlignment="Center"
+                        Foreground="{StaticResource AISkyDarkMutedTextBrush}"
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        Text="正在准备本地预报环境" />
+                </StackPanel>
+            </StackPanel>
         </Grid>
     </Grid>
 </Page>

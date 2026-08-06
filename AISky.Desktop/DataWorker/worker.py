@@ -193,7 +193,7 @@ def parse_filename(path: Path) -> dict[str, Any]:
 def initialize_database(database_path: Path, schema_path: Path) -> Path | None:
     database_path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        with closing(sqlite3.connect(database_path)) as connection:
+        with closing(sqlite3.connect(database_path, timeout=30)) as connection:
             connection.execute("PRAGMA journal_mode=WAL")
             connection.execute("PRAGMA foreign_keys=ON")
             connection.executescript(schema_path.read_text(encoding="utf-8"))
@@ -208,7 +208,7 @@ def initialize_database(database_path: Path, schema_path: Path) -> Path | None:
             database_path.replace(backup)
         for suffix in ("-wal", "-shm"):
             Path(f"{database_path}{suffix}").unlink(missing_ok=True)
-        with closing(sqlite3.connect(database_path)) as connection:
+        with closing(sqlite3.connect(database_path, timeout=30)) as connection:
             connection.execute("PRAGMA journal_mode=WAL")
             connection.execute("PRAGMA foreign_keys=ON")
             connection.executescript(schema_path.read_text(encoding="utf-8"))
@@ -496,7 +496,7 @@ def render_cache_ready(
         return False
     if manifest.get("cacheSchemaVersion") != CACHE_SCHEMA_VERSION:
         return False
-    with sqlite3.connect(database_path) as connection:
+    with sqlite3.connect(database_path, timeout=30) as connection:
         row = connection.execute(
             "SELECT is_plot_ready FROM forecast_runs WHERE id=?",
             (info["runId"],),
@@ -512,7 +512,7 @@ def update_run_index(
     checksum: str,
 ) -> None:
     now = utc_now()
-    with sqlite3.connect(database_path) as connection:
+    with sqlite3.connect(database_path, timeout=30) as connection:
         connection.execute("PRAGMA foreign_keys=ON")
         connection.execute(
             """
@@ -581,7 +581,7 @@ def mark_run_error(database_path: Path, source: Path, error: Exception) -> None:
         info = parse_filename(source)
     except ValueError:
         return
-    with sqlite3.connect(database_path) as connection:
+    with sqlite3.connect(database_path, timeout=30) as connection:
         connection.execute(
             """
             INSERT INTO forecast_runs (
@@ -610,7 +610,7 @@ def mark_run_error(database_path: Path, source: Path, error: Exception) -> None:
 
 def index_payload(database_path: Path) -> dict[str, Any]:
     runs: list[dict[str, Any]] = []
-    with sqlite3.connect(database_path) as connection:
+    with sqlite3.connect(database_path, timeout=30) as connection:
         connection.row_factory = sqlite3.Row
         rows = connection.execute(
             """
@@ -798,7 +798,7 @@ def upsert_download_job(
     state: str,
     error: str | None = None,
 ) -> None:
-    with sqlite3.connect(database_path) as connection:
+    with sqlite3.connect(database_path, timeout=30) as connection:
         connection.execute(
             """
             INSERT INTO download_jobs (
@@ -1128,7 +1128,7 @@ def run_cleanup(args: argparse.Namespace) -> dict[str, Any]:
     reclaimed_bytes = 0
     failed = 0
 
-    with sqlite3.connect(args.database) as connection:
+    with sqlite3.connect(args.database, timeout=30) as connection:
         connection.row_factory = sqlite3.Row
         rows = connection.execute(
             """
@@ -1170,7 +1170,7 @@ def run_cleanup(args: argparse.Namespace) -> dict[str, Any]:
                 )
                 shutil.rmtree(render_directory)
                 remove_empty_parents(render_directory.parent, render_root)
-            with sqlite3.connect(args.database) as connection:
+            with sqlite3.connect(args.database, timeout=30) as connection:
                 connection.execute("DELETE FROM cache_entries WHERE run_id=?", (row["id"],))
                 connection.execute("DELETE FROM forecast_runs WHERE id=?", (row["id"],))
             removed_runs += 1
@@ -1248,7 +1248,7 @@ def main() -> None:
             emit("ready", database=str(args.database))
             return
         if args.command == "status":
-            with sqlite3.connect(args.database) as connection:
+            with sqlite3.connect(args.database, timeout=30) as connection:
                 integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
                 journal = connection.execute("PRAGMA journal_mode").fetchone()[0]
             emit(

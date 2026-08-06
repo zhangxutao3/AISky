@@ -120,9 +120,9 @@ Filename: "{app}\.aisky-install.ini"; Section: "Install"; Key: "Mode"; String: "
 Filename: "{app}\.aisky-install.ini"; Section: "Install"; Key: "Version"; String: "{#MyAppVersion}"
 
 [Icons]
-Name: "{userprograms}\AISky\AISky"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Comment: "{#MyAppDisplayName}"; AppUserModelID: "AISky.Desktop"; Flags: runmaximized
+Name: "{userprograms}\AISky\AISky"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\Assets\AppIcon.ico"; Comment: "{#MyAppDisplayName}"; AppUserModelID: "AISky.Desktop"; Flags: runmaximized
 Name: "{userprograms}\AISky\卸载 AISky"; Filename: "{uninstallexe}"
-Name: "{userdesktop}\AISky"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Comment: "{#MyAppDisplayName}"; AppUserModelID: "AISky.Desktop"; Tasks: desktopicon; Flags: runmaximized
+Name: "{userdesktop}\AISky"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\Assets\AppIcon.ico"; Comment: "{#MyAppDisplayName}"; AppUserModelID: "AISky.Desktop"; Tasks: desktopicon; Flags: runmaximized
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "启动 AISky"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent

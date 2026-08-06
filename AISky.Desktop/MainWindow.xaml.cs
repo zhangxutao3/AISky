@@ -1,6 +1,7 @@
 using AISky_Desktop.Infrastructure;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using System.Diagnostics;
 using Windows.Graphics;
 
 // To learn more about WinUI, the WinUI project structure,
@@ -21,6 +22,11 @@ public sealed partial class MainWindow : Window
     private bool _hiddenToTray;
     private bool _trayHintShown;
     private bool _backgroundOperationWasRunning;
+    private readonly SemaphoreSlim _updateCheckLock = new(1, 1);
+    private Timer? _updateCheckTimer;
+    private UpdateRelease? _pendingUpdate;
+    private string? _lastPromptedUpdateVersion;
+    private bool _updateDialogOpen;
 
     public MainWindow(bool startInTray = false)
     {
@@ -63,11 +69,7 @@ public sealed partial class MainWindow : Window
                 AppWindow.IsShownInSwitchers = false;
                 AppWindow.Hide();
             }
-            if (App.Services.CurrentSettings.CheckUpdatesOnStartup
-                && App.Services.Updates.Options.IsConfigured)
-            {
-                _ = CheckUpdatesOnStartupAsync();
-            }
+            ApplyUpdateCheckSchedule();
         }
         catch (Exception exception)
         {
@@ -106,6 +108,21 @@ public sealed partial class MainWindow : Window
         AppWindow.IsShownInSwitchers = true;
         AppWindow.Show();
         Activate();
+        TryShowPendingUpdate();
+    }
+
+    public void RestartAfterDataMove()
+    {
+        var executable = Environment.ProcessPath
+            ?? throw new InvalidOperationException("无法定位 AISky 主程序。");
+        _ = Process.Start(new ProcessStartInfo
+        {
+            FileName = executable,
+            UseShellExecute = true,
+            WorkingDirectory = AppContext.BaseDirectory,
+            Arguments = $"--restart-after-pid={Environment.ProcessId}",
+        }) ?? throw new InvalidOperationException("无法重新启动 AISky。");
+        ExitApplication();
     }
 
     public void ExitApplication()
@@ -138,19 +155,36 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private async Task CheckUpdatesOnStartupAsync()
+    public void ApplyUpdateCheckSchedule()
     {
+        _updateCheckTimer?.Dispose();
+        _updateCheckTimer = null;
+        if (!App.Services.CurrentSettings.CheckUpdatesOnStartup
+            || !App.Services.Updates.Options.IsConfigured)
+        {
+            return;
+        }
+        _updateCheckTimer = new Timer(
+            _ => _ = CheckUpdatesInBackgroundAsync(),
+            null,
+            TimeSpan.FromSeconds(5),
+            TimeSpan.FromHours(6));
+    }
+
+    private async Task CheckUpdatesInBackgroundAsync()
+    {
+        if (!await _updateCheckLock.WaitAsync(0))
+        {
+            return;
+        }
         try
         {
             var result = await App.Services.Updates.CheckAsync();
             if (result.Availability == UpdateAvailability.Available
                 && result.Release is not null)
             {
-                DispatcherQueue.TryEnqueue(() =>
-                    _trayIcon?.ShowNotification(
-                        $"AISky {result.Release.Version} 可用",
-                        "新版本已经发布，可从托盘菜单或主界面查看更新说明。",
-                        TrayIconState.Normal));
+                _pendingUpdate = result.Release;
+                DispatcherQueue.TryEnqueue(TryShowPendingUpdate);
             }
         }
         catch (Exception exception)
@@ -158,6 +192,61 @@ public sealed partial class MainWindow : Window
             await App.Services.Log.WriteAsync(
                 "WARN",
                 $"Silent update check failed and will not interrupt startup: {exception}");
+        }
+        finally
+        {
+            _updateCheckLock.Release();
+        }
+    }
+
+    public void TryShowPendingUpdate()
+    {
+        var release = _pendingUpdate;
+        if (release is null
+            || _updateDialogOpen
+            || string.Equals(
+                _lastPromptedUpdateVersion,
+                release.Version,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        if (_hiddenToTray
+            || RootFrame.Content is not MainPage page
+            || !page.CanShowUpdatePrompt)
+        {
+            _trayIcon?.ShowNotification(
+                $"AISky {release.Version} 可用",
+                "新版本已经发布，打开 AISky 后可查看并安装。",
+                TrayIconState.Normal);
+            return;
+        }
+
+        _pendingUpdate = null;
+        _lastPromptedUpdateVersion = release.Version;
+        _updateDialogOpen = true;
+        _ = ShowPendingUpdateDialogAsync(page, release);
+    }
+
+    private async Task ShowPendingUpdateDialogAsync(
+        MainPage page,
+        UpdateRelease release)
+    {
+        try
+        {
+            await page.ShowUpdateDialogAsync();
+        }
+        catch (Exception exception)
+        {
+            _pendingUpdate = release;
+            await App.Services.Log.WriteAsync(
+                "WARN",
+                $"Automatic update prompt was deferred: {exception.Message}");
+        }
+        finally
+        {
+            _updateDialogOpen = false;
         }
     }
 
@@ -204,6 +293,8 @@ public sealed partial class MainWindow : Window
     private void MainWindow_Closed(object sender, WindowEventArgs args)
     {
         App.Services.BackgroundSync.StatusChanged -= BackgroundSync_StatusChanged;
+        _updateCheckTimer?.Dispose();
+        _updateCheckTimer = null;
         _trayIcon?.Dispose();
         _trayIcon = null;
         App.Services.BackgroundSync.Dispose();

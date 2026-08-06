@@ -29,21 +29,7 @@ public sealed class AppPaths
 
     public static AppPaths CreateDefault()
     {
-        var overrideRoot = Environment.GetEnvironmentVariable("AISKY_DATA_ROOT");
-        if (string.IsNullOrWhiteSpace(overrideRoot))
-        {
-            overrideRoot = Environment.GetEnvironmentVariable(
-                "AISKY_DATA_ROOT",
-                EnvironmentVariableTarget.User);
-        }
-        if (!string.IsNullOrWhiteSpace(overrideRoot))
-        {
-            return new AppPaths(Path.GetFullPath(
-                Environment.ExpandEnvironmentVariables(overrideRoot)));
-        }
-
-        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        return new AppPaths(Path.Combine(localAppData, "AISky", "Desktop"));
+        return new AppPaths(DataLocationStore.ResolveDataRoot());
     }
 
     public void EnsureDirectories()
@@ -56,5 +42,6 @@ public sealed class AppPaths
         Directory.CreateDirectory(Temp);
         Directory.CreateDirectory(Updates);
         Directory.CreateDirectory(RenderCache);
+        DataLocationStore.EnsureMarker(Root);
     }
 }

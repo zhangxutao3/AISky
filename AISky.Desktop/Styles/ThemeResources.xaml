@@ -87,8 +87,6 @@
         <Setter Property="Foreground" Value="#FF082B35" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="CornerRadius" Value="26" />
-        <Setter Property="FontFamily" Value="Segoe Fluent Icons" />
-        <Setter Property="FontSize" Value="18" />
         <Setter Property="UseSystemFocusVisuals" Value="True" />
     </Style>
 </ResourceDictionary>

@@ -907,8 +907,8 @@ function resizeWindCanvas() {
 function resetWindParticle(particle, randomAge = true) {
   particle.lon = view.left + Math.random() * (view.right - view.left);
   particle.lat = view.bottom + Math.random() * (view.top - view.bottom);
-  particle.age = randomAge ? Math.floor(Math.random() * 80) : 0;
-  particle.maxAge = 55 + Math.floor(Math.random() * 55);
+  particle.age = randomAge ? Math.floor(Math.random() * 40) : 0;
+  particle.maxAge = 28 + Math.floor(Math.random() * 28);
 }
 
 function stopWindAnimation(clear = true) {
@@ -938,7 +938,7 @@ function animateWind(timestamp) {
   if (windParticles.length > targetCount) windParticles.length = targetCount;
 
   windContext.globalCompositeOperation = "destination-in";
-  windContext.fillStyle = "rgba(0, 0, 0, 0.89)";
+  windContext.fillStyle = "rgba(0, 0, 0, 0.80)";
   windContext.fillRect(0, 0, width, height);
   windContext.globalCompositeOperation = "source-over";
   windContext.lineCap = "round";

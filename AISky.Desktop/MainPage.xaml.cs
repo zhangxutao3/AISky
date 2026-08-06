@@ -8,6 +8,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.Web.WebView2.Core;
 using Windows.Storage.Pickers;
 
@@ -18,6 +19,10 @@ public sealed partial class MainPage : Page
     private readonly DispatcherTimer _playbackTimer = new()
     {
         Interval = TimeSpan.FromMilliseconds(720),
+    };
+    private readonly DispatcherTimer _modelStatusTicker = new()
+    {
+        Interval = TimeSpan.FromMilliseconds(3500),
     };
 
     private ForecastIndex _index = new();
@@ -30,22 +35,30 @@ public sealed partial class MainPage : Page
     private bool _backgroundEventsAttached;
     private bool _isPlaying;
     private bool _firstRunBusy;
+    private bool _startupDataReady;
     private bool _modelSelectionMadeByUser;
     private int _firstRunCurrentItem;
     private int _currentForecastIndex;
     private int _lastTimelineSelectionIndex = -1;
     private int _displayUtcOffsetHours;
+    private int _modelStatusDisplayIndex;
+    private BackgroundSyncStatus? _lastBackgroundStatus;
     private string? _lastLayerSetKey;
     private string? _lastMapSeriesKey;
     private readonly List<Button> _timelineSlotButtons = [];
     private readonly List<LayerItem> _allLayerItems = [];
 
     public ObservableCollection<LayerItem> LayerItems { get; } = [];
+    public bool CanShowUpdatePrompt =>
+        StartupCover.Visibility == Visibility.Collapsed
+        && FirstRunOverlay.Visibility == Visibility.Collapsed
+        && XamlRoot is not null;
 
     public MainPage()
     {
         InitializeComponent();
         _playbackTimer.Tick += PlaybackTimer_Tick;
+        _modelStatusTicker.Tick += ModelStatusTicker_Tick;
         Unloaded += MainPage_Unloaded;
     }
 
@@ -54,10 +67,7 @@ public sealed partial class MainPage : Page
         try
         {
             await App.Services.InitializeAsync();
-            if (!App.Services.CurrentSettings.FirstRunSetupCompleted)
-            {
-                ShowFirstRunOverlay();
-            }
+            StartupStatusText.Text = "正在启动本地数据服务";
             _displayUtcOffsetHours = Math.Clamp(
                 App.Services.CurrentSettings.DisplayUtcOffsetHours,
                 -12,
@@ -91,6 +101,8 @@ public sealed partial class MainPage : Page
                 ServiceStatusText.Text = workerStatus.Message;
                 MapLoadingOverlay.Visibility = Visibility.Collapsed;
                 ShowFirstRunOverlay(workerStatus.Message, InfoBarSeverity.Error);
+                _startupDataReady = true;
+                StartupCover.Visibility = Visibility.Collapsed;
                 FirstRunProbeButton.IsEnabled = false;
                 await App.Services.Log.WriteAsync("ERROR", workerStatus.Message);
                 return;
@@ -110,6 +122,8 @@ public sealed partial class MainPage : Page
             {
                 ShowFirstRunOverlay();
             }
+            _startupDataReady = true;
+            TryCompleteStartupCover();
         }
         catch (Exception exception)
         {
@@ -118,6 +132,8 @@ public sealed partial class MainPage : Page
             ShowFirstRunOverlay(
                 $"本地数据服务未能启动：{FriendlyDataError(exception)}",
                 InfoBarSeverity.Error);
+            _startupDataReady = true;
+            StartupCover.Visibility = Visibility.Collapsed;
             try
             {
                 await App.Services.Log.WriteAsync("ERROR", exception.ToString());
@@ -146,6 +162,7 @@ public sealed partial class MainPage : Page
                 SendDisplayOptionsToMap();
                 SendSelectedRunToMap(forceFull: true);
                 await App.Services.Log.WriteAsync("INFO", "Map host reported ready.");
+                TryCompleteStartupCover();
                 return;
             }
         }
@@ -203,6 +220,11 @@ public sealed partial class MainPage : Page
         {
             MapLoadingOverlay.Visibility = Visibility.Collapsed;
             ServiceStatusText.Text = $"地图页面加载失败：{args.WebErrorStatus}";
+            _startupDataReady = true;
+            StartupCover.Visibility = Visibility.Collapsed;
+            ShowFirstRunOverlay(
+                $"本地地图加载失败：{args.WebErrorStatus}",
+                InfoBarSeverity.Error);
         }
     }
 
@@ -417,6 +439,7 @@ public sealed partial class MainPage : Page
         string? message = null,
         InfoBarSeverity severity = InfoBarSeverity.Informational)
     {
+        StartupCover.Visibility = Visibility.Collapsed;
         FirstRunOverlay.Visibility = Visibility.Visible;
         FirstRunStatusText.Text = "等待开始初始化";
         FirstRunProgressBar.Value = 0;
@@ -537,6 +560,8 @@ public sealed partial class MainPage : Page
         FirstRunOverlay.Visibility = Visibility.Collapsed;
         FirstRunInfo.IsOpen = false;
         FirstRunProgressRing.IsActive = false;
+        TryCompleteStartupCover();
+        ((Application.Current as App)?.MainWindow as MainWindow)?.TryShowPendingUpdate();
     }
 
     private string GetFirstRunModel() =>
@@ -575,6 +600,29 @@ public sealed partial class MainPage : Page
         try
         {
             await App.Services.UpdateSettingsAsync(dialog.SelectedSettings);
+            if ((Application.Current as App)?.MainWindow is MainWindow mainWindow)
+            {
+                mainWindow.ApplyUpdateCheckSchedule();
+            }
+            if (dialog.DataRootChanged)
+            {
+                FirstRunOverlay.Visibility = Visibility.Collapsed;
+                StartupStatusText.Text = "正在准备迁移预报数据";
+                StartupProgressBar.IsIndeterminate = true;
+                StartupCover.Visibility = Visibility.Visible;
+                var migrationProgress = new Progress<string>(message =>
+                    StartupStatusText.Text = message);
+                await App.Services.PrepareDataRootMigrationAsync(
+                    dialog.SelectedDataRoot,
+                    migrationProgress);
+                StartupStatusText.Text = "迁移完成，正在重新启动 AISky";
+                if ((Application.Current as App)?.MainWindow is MainWindow restartWindow)
+                {
+                    restartWindow.RestartAfterDataMove();
+                    return;
+                }
+                throw new InvalidOperationException("数据迁移完成，但主窗口无法重新启动。");
+            }
             _suppressAutoSync = true;
             AutoSyncButton.IsChecked = dialog.SelectedSettings.AutoSyncEnabled;
             _suppressAutoSync = false;
@@ -585,13 +633,14 @@ public sealed partial class MainPage : Page
             SendDisplayOptionsToMap();
             await App.Services.Log.WriteAsync(
                 "INFO",
-                $"Settings updated: autoSync={dialog.SelectedSettings.AutoSyncEnabled}, retentionDays={dialog.SelectedSettings.CacheRetentionDays}, keepInTray={dialog.SelectedSettings.KeepRunningInTray}, startWithWindows={dialog.SelectedSettings.StartWithWindows}, mapOpacity={dialog.SelectedSettings.MapLayerOpacity:F2}.");
+                $"Settings updated: autoSync={dialog.SelectedSettings.AutoSyncEnabled}, retentionDays={dialog.SelectedSettings.CacheRetentionDays}, keepInTray={dialog.SelectedSettings.KeepRunningInTray}, startWithWindows={dialog.SelectedSettings.StartWithWindows}, mapOpacity={dialog.SelectedSettings.MapLayerOpacity:F2}, dataRoot={App.Services.Paths.Root}.");
         }
         catch (Exception exception)
         {
             ServiceStatusTitle.Text = "设置未保存";
             ServiceStatusText.Text = exception.Message;
             SetStatusDot("AISkyErrorBrush");
+            StartupCover.Visibility = Visibility.Collapsed;
             await App.Services.Log.WriteAsync("ERROR", $"Settings update failed: {exception}");
         }
     }
@@ -785,6 +834,7 @@ public sealed partial class MainPage : Page
     private void MainPage_Unloaded(object sender, RoutedEventArgs e)
     {
         _playbackTimer.Stop();
+        _modelStatusTicker.Stop();
         if (!_backgroundEventsAttached)
         {
             return;
@@ -821,28 +871,28 @@ public sealed partial class MainPage : Page
 
     private void ApplyBackgroundStatus(BackgroundSyncStatus status)
     {
+        _lastBackgroundStatus = status;
         _suppressAutoSync = true;
         AutoSyncButton.IsChecked = status.AutoSyncEnabled;
         _suppressAutoSync = false;
         SyncNowButton.IsEnabled =
             status.State is not BackgroundSyncState.Syncing
                 and not BackgroundSyncState.Cleaning;
-        ServiceStatusTitle.Text = status.OperationLabel
-            ?? (status.State switch
-            {
-                BackgroundSyncState.Syncing => "正在同步",
-                BackgroundSyncState.Cleaning => "缓存维护",
-                BackgroundSyncState.Error => "需要处理",
-                BackgroundSyncState.Scheduled => "后台同步",
-                _ => "本地数据服务",
-            });
+        RenderBackgroundStatusLine(status);
+        if (!status.CanCancel && status.ModelStatuses is { Count: > 1 })
+        {
+            _modelStatusTicker.Start();
+        }
+        else
+        {
+            _modelStatusTicker.Stop();
+        }
         SetStatusDot(status.State switch
         {
             BackgroundSyncState.Syncing or BackgroundSyncState.Cleaning => "AISkyWarningBrush",
             BackgroundSyncState.Error => "AISkyErrorBrush",
             _ => "AISkySuccessBrush",
         });
-        ServiceStatusText.Text = FormatBackgroundStatusMessage(status);
         var isBusy = status.State is BackgroundSyncState.Syncing
             or BackgroundSyncState.Cleaning;
         BackgroundSyncProgressBar.Visibility = isBusy
@@ -864,6 +914,86 @@ public sealed partial class MainPage : Page
             : Visibility.Collapsed;
         CancelBackgroundTaskButton.IsEnabled = status.CanCancel;
         CancelBackgroundTaskCommand.IsEnabled = status.CanCancel;
+    }
+
+    private void ModelStatusTicker_Tick(object? sender, object e)
+    {
+        if (_lastBackgroundStatus?.ModelStatuses is not { Count: > 1 } statuses)
+        {
+            _modelStatusTicker.Stop();
+            return;
+        }
+        _modelStatusDisplayIndex = (_modelStatusDisplayIndex + 1) % statuses.Count;
+        RenderBackgroundStatusLine(_lastBackgroundStatus);
+        AnimateModelStatusLine();
+    }
+
+    private void AnimateModelStatusLine()
+    {
+        var storyboard = new Storyboard();
+        var slide = new DoubleAnimation
+        {
+            From = 9,
+            To = 0,
+            Duration = TimeSpan.FromMilliseconds(360),
+            EasingFunction = new QuadraticEase
+            {
+                EasingMode = EasingMode.EaseOut,
+            },
+        };
+        Storyboard.SetTarget(slide, ModelStatusLine);
+        Storyboard.SetTargetProperty(
+            slide,
+            "(UIElement.RenderTransform).(TranslateTransform.Y)");
+
+        var fade = new DoubleAnimation
+        {
+            From = 0,
+            To = 1,
+            Duration = TimeSpan.FromMilliseconds(280),
+        };
+        Storyboard.SetTarget(fade, ModelStatusLine);
+        Storyboard.SetTargetProperty(fade, "Opacity");
+
+        storyboard.Children.Add(slide);
+        storyboard.Children.Add(fade);
+        storyboard.Begin();
+    }
+
+    private void RenderBackgroundStatusLine(BackgroundSyncStatus status)
+    {
+        if (!status.CanCancel && status.ModelStatuses is { Count: > 0 } statuses)
+        {
+            var item = statuses[_modelStatusDisplayIndex % statuses.Count];
+            ServiceStatusTitle.Text = item.Model.Replace("AISky-", "", StringComparison.Ordinal);
+            var state = item.State switch
+            {
+                ModelSyncState.Queued => "等待",
+                ModelSyncState.Checking => "检查",
+                ModelSyncState.Downloading => "下载",
+                ModelSyncState.Complete => "完成",
+                ModelSyncState.Skipped => "已缓存",
+                ModelSyncState.NoData => "暂无数据",
+                ModelSyncState.Error => "失败",
+                _ => "状态",
+            };
+            var speed = item.BytesPerSecond > 1024
+                ? $" · {BackgroundSyncService.FormatBytes((long)item.BytesPerSecond)}/s"
+                : "";
+            ServiceStatusText.Text = $"{state} · {item.Message}{speed}";
+            return;
+        }
+
+        ServiceStatusTitle.Text = status.OperationLabel
+            ?? (status.State switch
+            {
+                BackgroundSyncState.Syncing => "正在同步",
+                BackgroundSyncState.Cleaning => "缓存维护",
+                BackgroundSyncState.Error => "需要处理",
+                BackgroundSyncState.Scheduled => "后台同步",
+                _ => "本地数据服务",
+            });
+        ServiceStatusText.Text = FormatBackgroundStatusMessage(status);
     }
 
     private void SetStatusDot(string resourceKey)
@@ -1482,7 +1612,12 @@ public sealed partial class MainPage : Page
     private void SetPlaybackState(bool isPlaying)
     {
         _isPlaying = isPlaying;
-        PlayButton.Content = isPlaying ? "\uE769" : "\uE768";
+        PlaybackPlayIcon.Visibility = isPlaying
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+        PlaybackPauseIcon.Visibility = isPlaying
+            ? Visibility.Visible
+            : Visibility.Collapsed;
         ToolTipService.SetToolTip(PlayButton, isPlaying ? "暂停" : "播放");
         if (isPlaying)
         {
@@ -1582,6 +1717,16 @@ public sealed partial class MainPage : Page
             return;
         }
         MapWebView.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(payload));
+    }
+
+    private void TryCompleteStartupCover()
+    {
+        if (!_startupDataReady || !_mapReady)
+        {
+            return;
+        }
+        StartupCover.Visibility = Visibility.Collapsed;
+        ((Application.Current as App)?.MainWindow as MainWindow)?.TryShowPendingUpdate();
     }
 }
 

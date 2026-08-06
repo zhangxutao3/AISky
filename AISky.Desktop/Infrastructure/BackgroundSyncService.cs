@@ -1,5 +1,6 @@
 using AISky_Desktop.Core;
 using AISky_Desktop.DataWorker;
+using System.Diagnostics;
 using System.Globalization;
 
 namespace AISky_Desktop.Infrastructure;
@@ -13,6 +14,27 @@ public enum BackgroundSyncState
     Error,
 }
 
+public enum ModelSyncState
+{
+    Queued,
+    Checking,
+    Downloading,
+    Complete,
+    Skipped,
+    NoData,
+    Error,
+}
+
+public sealed record ModelSyncProgress(
+    string Model,
+    ModelSyncState State,
+    string Message,
+    double? ProgressPercent = null,
+    int? CurrentItem = null,
+    int? TotalItems = null,
+    double BytesPerSecond = 0,
+    DateTimeOffset? UpdatedUtc = null);
+
 public sealed record BackgroundSyncStatus(
     BackgroundSyncState State,
     string Message,
@@ -25,7 +47,9 @@ public sealed record BackgroundSyncStatus(
     int? CurrentItem = null,
     int? TotalItems = null,
     string? OperationLabel = null,
-    bool CanCancel = false);
+    bool CanCancel = false,
+    IReadOnlyList<ModelSyncProgress>? ModelStatuses = null,
+    double DownloadBytesPerSecond = 0);
 
 public sealed record FirstForecastPreparationResult(
     ForecastIndex Index,
@@ -47,6 +71,10 @@ public sealed class BackgroundSyncService(
     private readonly CancellationTokenSource _shutdown = new();
     private readonly object _timerLock = new();
     private readonly object _activeCancellationLock = new();
+    private readonly object _modelStatusLock = new();
+    private readonly object _statusLock = new();
+    private readonly Dictionary<string, ModelSyncProgress> _modelStatuses =
+        new(StringComparer.Ordinal);
     private AppSettings _settings = new();
     private Timer? _timer;
     private CancellationTokenSource? _activeBackfillCancellation;
@@ -128,97 +156,39 @@ public sealed class BackgroundSyncService(
             _shutdown.Token);
         try
         {
-            Publish(
-                BackgroundSyncState.Syncing,
-                "正在检查 Energy 与 SDS 的最新起报",
-                progressPercent: 0,
-                operationLabel: "双模型同步");
-            var index = await dataWorker.GetIndexAsync(linkedCancellation.Token);
-            var foundModels = 0;
-            var downloaded = 0;
-            var skipped = 0;
-            var failures = 0;
             var forecastHours = Math.Clamp(_settings.AutoSyncForecastHours, 3, 360);
             var expectedRuns = forecastHours / 3;
+            ResetModelStatuses(expectedRuns);
+            Publish(
+                BackgroundSyncState.Syncing,
+                "Energy 与 SDS 正在并行检查最新起报",
+                progressPercent: 0,
+                operationLabel: "双模型并行同步");
+            var index = await dataWorker.GetIndexAsync(linkedCancellation.Token);
             var nowUtc = DateTimeOffset.UtcNow;
-            Exception? firstFailure = null;
-            for (var modelIndex = 0; modelIndex < Models.Length; modelIndex++)
-            {
-                var model = Models[modelIndex];
-                if (skipRecentCompleteModels
-                    && HasRecentCompleteRun(index, model, forecastHours, nowUtc))
-                {
-                    foundModels++;
-                    skipped += expectedRuns;
-                    Publish(
-                        BackgroundSyncState.Syncing,
-                        $"{model} · 最近完整预报已在本地，跳过重复同步",
-                        progressPercent: (modelIndex + 1d) / Models.Length * 100,
-                        activeModel: model,
-                        currentItem: expectedRuns,
-                        totalItems: expectedRuns,
-                        operationLabel: "双模型同步");
-                    continue;
-                }
-
-                var progress = new DirectProgress<DataWorkerProgress>(item =>
-                {
-                    var modelFraction = item.CurrentItem is { } current
-                        && item.TotalItems is > 0
-                            ? Math.Clamp(current / (double)item.TotalItems.Value, 0, 1)
-                            : item.Percent is { } percent
-                                ? Math.Clamp(percent / 100, 0, 1)
-                                : 0;
-                    Publish(
-                        BackgroundSyncState.Syncing,
-                        item.IsWarning
-                            ? $"{model} · 同步提醒：{item.Message}"
-                            : $"{model} · {item.Message}",
-                        progressPercent: (modelIndex + modelFraction) / Models.Length * 100,
-                        activeModel: model,
-                        currentItem: item.CurrentItem,
-                        totalItems: item.TotalItems,
-                        operationLabel: "双模型同步");
-                });
-                try
-                {
-                    var result = await dataWorker.SyncLatestAsync(
-                        new SyncLatestRequest(
-                            model,
-                            _settings.DataAccessPassword,
-                            Math.Clamp(_settings.LatestProbeDays, 1, 14),
-                            forecastHours),
-                        progress,
-                        linkedCancellation.Token);
-                    index = result.Index;
-                    foundModels += result.Found ? 1 : 0;
-                    downloaded += result.Downloaded;
-                    skipped += result.Skipped;
-                    failures += result.Failed;
-                    Publish(
-                        BackgroundSyncState.Syncing,
-                        result.Found
-                            ? $"{model} · 最新起报检查完成"
-                            : $"{model} · 暂未发现可用新起报",
-                        progressPercent: (modelIndex + 1d) / Models.Length * 100,
-                        activeModel: model,
-                        currentItem: expectedRuns,
-                        totalItems: expectedRuns,
-                        operationLabel: "双模型同步");
-                }
-                catch (Exception exception) when (exception is not OperationCanceledException)
-                {
-                    failures++;
-                    firstFailure ??= exception;
-                    await log.WriteAsync("ERROR", $"{model} automatic sync failed: {exception}");
-                }
-            }
+            var tasks = Models.Select(model => SyncModelAsync(
+                model,
+                index,
+                skipRecentCompleteModels,
+                forecastHours,
+                expectedRuns,
+                nowUtc,
+                linkedCancellation.Token));
+            var outcomes = await Task.WhenAll(tasks);
+            var foundModels = outcomes.Count(item => item.Found);
+            var downloaded = outcomes.Sum(item => item.Downloaded);
+            var skipped = outcomes.Sum(item => item.Skipped);
+            var failures = outcomes.Sum(item => item.Failed);
+            var firstFailure = outcomes
+                .Select(item => item.Exception)
+                .FirstOrDefault(item => item is not null);
+            index = await dataWorker.GetIndexAsync(linkedCancellation.Token);
 
             Publish(
                 BackgroundSyncState.Cleaning,
                 "双模型检查完成，正在清理过期缓存",
                 progressPercent: 100,
-                operationLabel: "双模型同步");
+                operationLabel: "双模型并行同步");
             var cleanup = await dataWorker.CleanupAsync(
                 new CleanupRequest(Math.Clamp(_settings.CacheRetentionDays, 1, 365)),
                 null,
@@ -265,6 +235,181 @@ public sealed class BackgroundSyncService(
         {
             _operationLock.Release();
         }
+    }
+
+    private async Task<ModelSyncOutcome> SyncModelAsync(
+        string model,
+        ForecastIndex index,
+        bool skipRecentCompleteModels,
+        int forecastHours,
+        int expectedRuns,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken)
+    {
+        if (skipRecentCompleteModels
+            && HasRecentCompleteRun(index, model, forecastHours, nowUtc))
+        {
+            UpdateModelStatus(
+                model,
+                ModelSyncState.Skipped,
+                "最近完整预报已在本地",
+                100,
+                expectedRuns,
+                expectedRuns);
+            return new ModelSyncOutcome(true, 0, expectedRuns, 0, null);
+        }
+
+        var speedMeter = new DownloadSpeedMeter();
+        var lastPercent = 0d;
+        var progress = new DirectProgress<DataWorkerProgress>(item =>
+        {
+            lastPercent = ResolveModelPercent(item, lastPercent);
+            var speed = item.Stage == "transfer"
+                ? speedMeter.Observe(item.BytesReceived)
+                : speedMeter.CurrentBytesPerSecond;
+            var state = item.Stage is "transfer" or "download" or "file" or "file-complete"
+                ? ModelSyncState.Downloading
+                : ModelSyncState.Checking;
+            UpdateModelStatus(
+                model,
+                state,
+                item.IsWarning ? $"提醒：{item.Message}" : item.Message,
+                lastPercent,
+                item.CurrentItem,
+                item.TotalItems,
+                speed);
+        });
+
+        try
+        {
+            UpdateModelStatus(model, ModelSyncState.Checking, "正在检查最新起报", 0);
+            var result = await dataWorker.SyncLatestAsync(
+                new SyncLatestRequest(
+                    model,
+                    _settings.DataAccessPassword,
+                    Math.Clamp(_settings.LatestProbeDays, 1, 14),
+                    forecastHours),
+                progress,
+                cancellationToken);
+            UpdateModelStatus(
+                model,
+                result.Found ? ModelSyncState.Complete : ModelSyncState.NoData,
+                result.Found
+                    ? result.Downloaded > 0
+                        ? $"完成 · 新增 {result.Downloaded} 个时次"
+                        : "已是最新"
+                    : "暂未发现可用起报",
+                100,
+                expectedRuns,
+                expectedRuns);
+            return new ModelSyncOutcome(
+                result.Found,
+                result.Downloaded,
+                result.Skipped,
+                result.Failed,
+                null);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            UpdateModelStatus(
+                model,
+                ModelSyncState.Error,
+                FriendlyError(exception),
+                lastPercent);
+            await log.WriteAsync("ERROR", $"{model} automatic sync failed: {exception}");
+            return new ModelSyncOutcome(false, 0, 0, 1, exception);
+        }
+    }
+
+    private void ResetModelStatuses(int expectedRuns)
+    {
+        lock (_modelStatusLock)
+        {
+            _modelStatuses.Clear();
+            foreach (var model in Models)
+            {
+                _modelStatuses[model] = new ModelSyncProgress(
+                    model,
+                    ModelSyncState.Queued,
+                    "等待同步",
+                    0,
+                    0,
+                    expectedRuns,
+                    0,
+                    DateTimeOffset.UtcNow);
+            }
+        }
+    }
+
+    private void UpdateModelStatus(
+        string model,
+        ModelSyncState state,
+        string message,
+        double? progressPercent,
+        int? currentItem = null,
+        int? totalItems = null,
+        double bytesPerSecond = 0)
+    {
+        lock (_modelStatusLock)
+        {
+            _modelStatuses[model] = new ModelSyncProgress(
+                model,
+                state,
+                message,
+                progressPercent,
+                currentItem,
+                totalItems,
+                bytesPerSecond,
+                DateTimeOffset.UtcNow);
+        }
+        var snapshot = SnapshotModelStatuses();
+        Publish(
+            BackgroundSyncState.Syncing,
+            "Energy 与 SDS 正在并行同步",
+            progressPercent: snapshot
+                .Where(item => item.ProgressPercent is not null)
+                .Select(item => item.ProgressPercent!.Value)
+                .DefaultIfEmpty(0)
+                .Average(),
+            activeModel: model,
+            currentItem: currentItem,
+            totalItems: totalItems,
+            operationLabel: "双模型并行同步");
+    }
+
+    private IReadOnlyList<ModelSyncProgress> SnapshotModelStatuses()
+    {
+        lock (_modelStatusLock)
+        {
+            return Models
+                .Where(_modelStatuses.ContainsKey)
+                .Select(model => _modelStatuses[model])
+                .ToArray();
+        }
+    }
+
+    private static double ResolveModelPercent(
+        DataWorkerProgress progress,
+        double fallback)
+    {
+        if (progress.Stage == "probe")
+        {
+            return Math.Clamp(progress.Percent ?? fallback, 0, 35);
+        }
+        if (progress.Stage == "download")
+        {
+            return 40;
+        }
+        if (progress.Stage is "file" or "file-complete")
+        {
+            var filePercent = progress.Percent
+                ?? (progress.CurrentItem is { } current
+                    && progress.TotalItems is > 0
+                        ? current / (double)progress.TotalItems.Value * 100
+                        : 0);
+            return 40 + Math.Clamp(filePercent, 0, 100) * 0.6;
+        }
+        return Math.Clamp(progress.Percent ?? fallback, 0, 100);
     }
 
     public async Task<ForecastIndex?> FillForecastSeriesAsync(
@@ -662,7 +807,8 @@ public sealed class BackgroundSyncService(
         string? operationLabel = null,
         bool canCancel = false)
     {
-        CurrentStatus = new BackgroundSyncStatus(
+        var modelStatuses = SnapshotModelStatuses();
+        var status = new BackgroundSyncStatus(
             state,
             message,
             _settings.AutoSyncEnabled,
@@ -674,8 +820,14 @@ public sealed class BackgroundSyncService(
             currentItem,
             totalItems,
             operationLabel,
-            canCancel);
-        StatusChanged?.Invoke(this, CurrentStatus);
+            canCancel,
+            modelStatuses,
+            modelStatuses.Sum(item => item.BytesPerSecond));
+        lock (_statusLock)
+        {
+            CurrentStatus = status;
+        }
+        StatusChanged?.Invoke(this, status);
     }
 
     private bool HasRecentCompleteRun(
@@ -731,6 +883,18 @@ public sealed class BackgroundSyncService(
         return $"{bytes / 1024d / 1024 / 1024:0.00} GB";
     }
 
+    public async Task StopForMigrationAsync(
+        CancellationToken cancellationToken = default)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+        Dispose();
+        await _operationLock.WaitAsync(cancellationToken);
+        _operationLock.Release();
+    }
+
     public void Dispose()
     {
         if (_disposed)
@@ -753,5 +917,47 @@ public sealed class BackgroundSyncService(
     private sealed class DirectProgress<T>(Action<T> handler) : IProgress<T>
     {
         public void Report(T value) => handler(value);
+    }
+
+    private sealed record ModelSyncOutcome(
+        bool Found,
+        int Downloaded,
+        int Skipped,
+        int Failed,
+        Exception? Exception);
+
+    private sealed class DownloadSpeedMeter
+    {
+        private readonly Stopwatch _stopwatch = Stopwatch.StartNew();
+        private long _lastBytes;
+        private long _lastTimestamp;
+
+        public double CurrentBytesPerSecond { get; private set; }
+
+        public double Observe(long? receivedBytes)
+        {
+            if (receivedBytes is not { } bytes)
+            {
+                return CurrentBytesPerSecond;
+            }
+            var timestamp = _stopwatch.ElapsedMilliseconds;
+            if (bytes < _lastBytes)
+            {
+                _lastBytes = 0;
+                _lastTimestamp = timestamp;
+            }
+            var elapsed = timestamp - _lastTimestamp;
+            if (elapsed < 180)
+            {
+                return CurrentBytesPerSecond;
+            }
+            var sample = Math.Max(0, bytes - _lastBytes) * 1000d / elapsed;
+            CurrentBytesPerSecond = CurrentBytesPerSecond <= 0
+                ? sample
+                : CurrentBytesPerSecond * 0.62 + sample * 0.38;
+            _lastBytes = bytes;
+            _lastTimestamp = timestamp;
+            return CurrentBytesPerSecond;
+        }
     }
 }
