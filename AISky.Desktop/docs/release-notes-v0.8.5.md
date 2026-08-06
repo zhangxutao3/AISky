@@ -17,7 +17,9 @@ Windows 安装版与软件内升级支持。
 - 两种版本均验证 GitHub 文件大小与 SHA-256
 - 安装、升级和卸载不会删除 NetCDF、索引、设置或日志
 
-## 发布安全
+## 下载提示
 
-- 发布脚本已接入 Authenticode、RFC 3161 时间戳和签名复验
-- 正式上传默认拒绝未签名产物，避免误发“未知发布者”版本
+- 本次 GitHub Release 按项目所有者的选择以未签名方式发布
+- Windows 首次安装或启动时可能显示“未知发布者”或 Microsoft Defender SmartScreen 提示
+- 请仅从本项目的 GitHub Releases 页面下载，并使用随附的 SHA-256 文件校验完整性
+- 发布脚本保留 Authenticode、RFC 3161 时间戳和签名复验能力，后续取得可信证书后可直接启用
