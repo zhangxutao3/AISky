@@ -351,7 +351,7 @@ function ensureTyphoonWorker() {
         typhoonTrackCache.delete(typhoonTrackCache.keys().next().value);
       }
       typhoonLegendStatus.textContent = typhoonTracks.length > 0
-        ? `${typhoonTracks.length} 条未来 72 小时模拟路径`
+        ? `${typhoonTracks.length} 条未来 5 天模拟路径`
         : "当前起报未识别到台风";
       typhoonLegend.hidden = !showTyphoonPaths;
       reportTyphoonStatus("ready", typhoonTracks.length);
@@ -396,7 +396,7 @@ function refreshTyphoonAnalysis() {
     typhoonAnalysisKey = key;
     typhoonTracks = typhoonTrackCache.get(key);
     typhoonLegendStatus.textContent = typhoonTracks.length > 0
-      ? `${typhoonTracks.length} 条未来 72 小时模拟路径`
+      ? `${typhoonTracks.length} 条未来 5 天模拟路径`
       : "当前起报未识别到台风";
     reportTyphoonStatus("ready", typhoonTracks.length);
     requestRender();
@@ -1103,11 +1103,14 @@ function drawTyphoonPaths(width, height) {
   for (const track of typhoonTracks) {
     const style = TYPHOON_MODEL_STYLES[track.model]
       || { color: "#50bfd0", dash: [] };
+    const displayPoints = window.AISkyTyphoon?.smoothTrackPoints(track.points, 2)
+      || track.points;
     for (let copy = firstCopy; copy <= lastCopy; copy += 1) {
       const longitudeOffset = copy * 360;
-      drawTrackPath(track.points, width, height, longitudeOffset, style);
+      drawTrackPath(displayPoints, width, height, longitudeOffset, style);
       for (let pointIndex = 0; pointIndex < track.points.length; pointIndex += 1) {
         const point = track.points[pointIndex];
+        const displayPoint = displayPoints[pointIndex] || point;
         const isActive = Math.abs(Number(point.leadHours) - activeLead) < 1.5;
         const isSelected = selectedTyphoonPoint
           && selectedTyphoonPoint.track.id === track.id
@@ -1118,7 +1121,12 @@ function drawTyphoonPaths(width, height) {
           && !isSelected) {
           continue;
         }
-        const [x, y] = project(point.lon + longitudeOffset, point.lat, width, height);
+        const [x, y] = project(
+          displayPoint.lon + longitudeOffset,
+          displayPoint.lat,
+          width,
+          height,
+        );
         if (x < -18 * ratio || x > width + 18 * ratio
           || y < -18 * ratio || y > height + 18 * ratio) {
           continue;
@@ -1146,7 +1154,7 @@ function drawTyphoonPaths(width, height) {
         context.restore();
         typhoonHitPoints.push({ x, y, point, track });
       }
-      const lastPoint = track.points.at(-1);
+      const lastPoint = displayPoints.at(-1);
       if (lastPoint && longitudeSpan <= 90) {
         const [labelX, labelY] = project(
           lastPoint.lon + longitudeOffset,
@@ -1205,7 +1213,7 @@ function showTyphoonDetails(hit) {
   typhoonName.textContent = track.name;
   typhoonStrength.textContent = point.intensity?.label || "热带气旋";
   typhoonStrengthDot.style.background = point.intensity?.color || "#63d6c7";
-  typhoonWind.textContent = `${point.windSpeed.toFixed(1)} m/s · ${point.intensity?.code || "TC"}`;
+  typhoonWind.textContent = `最大风速 ${point.windSpeed.toFixed(1)} m/s`;
   typhoonConfidence.textContent = `${track.confidence}%`;
   typhoonTime.textContent = `${formatForecastKey(point.forecastKey)} ${displayTimeZoneLabel()}`;
   typhoonLead.textContent = `+${point.leadHours}h`;

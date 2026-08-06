@@ -9,7 +9,7 @@
     { code: "STY", label: "强台风", minimum: 41.5, color: "#f3944f" },
     { code: "SuperTY", label: "超强台风", minimum: 51.0, color: "#ed5972" },
   ];
-  const MAX_FORECAST_LEAD_HOURS = 72;
+  const MAX_FORECAST_LEAD_HOURS = 120;
 
   function clamp(value, minimum, maximum) {
     return Math.max(minimum, Math.min(maximum, value));
@@ -38,6 +38,51 @@
       if (windSpeed >= item.minimum) selected = item;
     }
     return { ...selected };
+  }
+
+  function smoothTrackPoints(points, passes = 2) {
+    if (!Array.isArray(points) || points.length < 3) {
+      return Array.isArray(points) ? points.map((point) => ({ ...point })) : [];
+    }
+
+    // Unwrap longitudes first so a track crossing 180° is smoothed across the
+    // dateline instead of taking a false detour around the globe.
+    let coordinates = [];
+    for (let index = 0; index < points.length; index += 1) {
+      const point = points[index];
+      let longitude = Number(point.lon);
+      if (index > 0) {
+        const previous = coordinates[index - 1].lon;
+        while (longitude - previous > 180) longitude -= 360;
+        while (longitude - previous < -180) longitude += 360;
+      }
+      coordinates.push({ lon: longitude, lat: Number(point.lat) });
+    }
+
+    const kernel = [1, 4, 6, 4, 1];
+    const divisor = 16;
+    const passCount = clamp(Math.round(Number(passes) || 0), 0, 4);
+    for (let pass = 0; pass < passCount; pass += 1) {
+      const previous = coordinates;
+      coordinates = previous.map((point, index) => {
+        if (index === 0 || index === previous.length - 1) return { ...point };
+        let longitude = 0;
+        let latitude = 0;
+        for (let offset = -2; offset <= 2; offset += 1) {
+          const sample = previous[clamp(index + offset, 0, previous.length - 1)];
+          const weight = kernel[offset + 2];
+          longitude += sample.lon * weight;
+          latitude += sample.lat * weight;
+        }
+        return { lon: longitude / divisor, lat: latitude / divisor };
+      });
+    }
+
+    return points.map((point, index) => ({
+      ...point,
+      lon: coordinates[index].lon,
+      lat: coordinates[index].lat,
+    }));
   }
 
   function coordinateAt(index, count, extent) {
@@ -264,6 +309,7 @@
     detectCandidates,
     haversineDistance,
     intensityFor,
+    smoothTrackPoints,
   };
   root.AISkyTyphoon = api;
   if (typeof module !== "undefined" && module.exports) {

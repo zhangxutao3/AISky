@@ -17,12 +17,12 @@
       <span><i class="model-line model-line--sds"></i>SDS</span>
     </div>
     <div class="typhoon-legend__levels" aria-label="台风强度颜色">
-      <span><i style="--level:#63d6c7"></i>TD</span>
-      <span><i style="--level:#48a9f8"></i>TS</span>
-      <span><i style="--level:#72c96b"></i>STS</span>
-      <span><i style="--level:#f2cb52"></i>TY</span>
-      <span><i style="--level:#f3944f"></i>STY</span>
-      <span><i style="--level:#ed5972"></i>SuperTY</span>
+      <span><i style="--level:#63d6c7"></i>热带低压</span>
+      <span><i style="--level:#48a9f8"></i>热带风暴</span>
+      <span><i style="--level:#72c96b"></i>强热带风暴</span>
+      <span><i style="--level:#f2cb52"></i>台风</span>
+      <span><i style="--level:#f3944f"></i>强台风</span>
+      <span><i style="--level:#ed5972"></i>超强台风</span>
     </div>
     <div class="typhoon-legend__status" id="typhoonLegendStatus">正在分析本地模式</div>
   </div>
@@ -54,7 +54,7 @@
       <div><dt>中心气压</dt><dd id="typhoonPressure">-- hPa</dd></div>
       <div><dt>中心位置</dt><dd id="typhoonLocation">--</dd></div>
     </dl>
-    <p class="typhoon-note">未来 72 小时模型模拟路径，仅代表本地 SLP 与 WIND10 模式结果。</p>
+    <p class="typhoon-note">未来 5 天模型模拟路径，仅代表本地 SLP 与 WIND10 模式结果。</p>
   </section>
   <section class="point-panel" id="pointPanel" aria-label="格点预报详情" hidden>
     <div class="point-panel__header">
@@ -87,6 +87,7 @@
       点击地图可查看格点的多时次变化
     </div>
   </section>
+  <script src="typhoon-algorithm.js"></script>
   <script src="map.js"></script>
 </body>
 </html>

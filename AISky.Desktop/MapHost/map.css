@@ -105,6 +105,11 @@ body {
   gap: 10px;
 }
 
+.typhoon-legend__levels {
+  gap: 8px;
+  font-size: 10px;
+}
+
 .typhoon-legend__models span,
 .typhoon-legend__levels span {
   display: inline-flex;

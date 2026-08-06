@@ -53,15 +53,15 @@ assert.equal(tracks.length, 1);
 assert.equal(tracks[0].points.length, 8);
 assert.ok(tracks[0].confidence >= 70);
 assert.equal(tracks[0].points[0].intensity.code, "TY");
-assert.equal(algorithm.MAX_FORECAST_LEAD_HOURS, 72);
+assert.equal(algorithm.MAX_FORECAST_LEAD_HOURS, 120);
 
 const extendedCandidates = [
   ...runCandidates,
   {
-    run: { ...runCandidates.at(-1).run, leadHours: 75 },
+    run: { ...runCandidates.at(-1).run, leadHours: 123 },
     candidates: runCandidates.at(-1).candidates.map((candidate) => ({
       ...candidate,
-      leadHours: 75,
+      leadHours: 123,
     })),
   },
 ];
@@ -71,7 +71,24 @@ const limitedTracks = algorithm.buildTracks(
   extendedCandidates,
 );
 assert.ok(limitedTracks.every((track) =>
-  track.points.every((point) => point.leadHours <= 72)));
+  track.points.every((point) => point.leadHours <= 120)));
+
+const staircase = Array.from({ length: 12 }, (_, index) => ({
+  lon: 120 + Math.floor(index / 2),
+  lat: 15 + Math.floor((index + 1) / 2),
+  leadHours: index * 3,
+}));
+const smoothed = algorithm.smoothTrackPoints(staircase, 2);
+assert.deepEqual(smoothed[0], staircase[0]);
+assert.deepEqual(smoothed.at(-1), staircase.at(-1));
+const cornerEnergy = (points) => points.slice(1, -1).reduce((sum, point, index) => {
+  const previous = points[index];
+  const next = points[index + 2];
+  return sum
+    + Math.abs(next.lon - 2 * point.lon + previous.lon)
+    + Math.abs(next.lat - 2 * point.lat + previous.lat);
+}, 0);
+assert.ok(cornerEnergy(smoothed) < cornerEnergy(staircase) * 0.55);
 
 const weak = createVortexRun(0, true);
 assert.equal(algorithm.detectCandidates(weak.run, weak.slp, weak.wind).length, 0);
