@@ -28,7 +28,7 @@
 - Release x64 构建：通过
 - 完整便携包与每用户安装器生成：通过
 - `AISky-Desktop-win-x64.zip` SHA-256：
-  `1d976900b9376e33c56dd2fcd4d07741c41e224527b9cc7af404c7d485567bd5`
+  `619307539bb92666e2b51f692e8b1e96f45138af445b9b899b48d52bb6a084a9`
 - `AISky-Setup-win-x64.exe` SHA-256：
-  `79e5b17170cf14a37a008057bbcfe7f70db0d87a43907198ec5466fa8d101cf8`
+  `178c76715ff97cbf1b7c5ba2dad9eb96c78528f2ea5fddfcd542c5bf36791d9a`
 - 打包目录中的应用启动、主窗口响应与地图加载：通过
