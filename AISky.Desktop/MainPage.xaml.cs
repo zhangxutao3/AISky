@@ -1606,23 +1606,18 @@ public sealed partial class MainPage : Page
     private object[] CreateTyphoonModelSeries()
     {
         var result = new List<object>();
+        var selectedInitKey = _selectedRun?.InitKey;
+        if (string.IsNullOrWhiteSpace(selectedInitKey))
+        {
+            return result.ToArray();
+        }
+
         foreach (var model in new[] { "AISky-Energy", "AISky-SDS" })
         {
-            var initKey = _index.Runs
-                .Where(run => string.Equals(run.Model, model, StringComparison.Ordinal))
-                .Select(run => run.InitKey)
-                .Distinct(StringComparer.Ordinal)
-                .OrderDescending()
-                .FirstOrDefault();
-            if (string.IsNullOrWhiteSpace(initKey))
-            {
-                continue;
-            }
-
             var runs = _index.Runs
                 .Where(run =>
                     string.Equals(run.Model, model, StringComparison.Ordinal)
-                    && string.Equals(run.InitKey, initKey, StringComparison.Ordinal))
+                    && string.Equals(run.InitKey, selectedInitKey, StringComparison.Ordinal))
                 .OrderBy(run => run.LeadHours)
                 .Select(run =>
                 {
@@ -1655,27 +1650,28 @@ public sealed partial class MainPage : Page
             {
                 continue;
             }
-            result.Add(new { model, initKey, runs });
+            result.Add(new { model, initKey = selectedInitKey, runs });
         }
         return result.ToArray();
     }
 
-    private string TyphoonSeriesKey() =>
-        string.Join(
+    private string TyphoonSeriesKey()
+    {
+        var selectedInitKey = _selectedRun?.InitKey ?? "";
+        return string.Join(
             "|",
             new[] { "AISky-Energy", "AISky-SDS" }.Select(model =>
             {
                 var runs = _index.Runs
-                    .Where(run => string.Equals(run.Model, model, StringComparison.Ordinal))
-                    .OrderByDescending(run => run.InitKey)
-                    .ThenBy(run => run.LeadHours)
+                    .Where(run =>
+                        string.Equals(run.Model, model, StringComparison.Ordinal)
+                        && string.Equals(run.InitKey, selectedInitKey, StringComparison.Ordinal))
+                    .OrderBy(run => run.LeadHours)
                     .ToList();
-                var latestInit = runs.FirstOrDefault()?.InitKey;
-                var latestRuns = runs
-                    .Where(run => string.Equals(run.InitKey, latestInit, StringComparison.Ordinal))
-                    .ToList();
-                return $"{model}:{latestInit}:{latestRuns.Count}:{latestRuns.LastOrDefault()?.Id}";
+                return
+                    $"{model}:{selectedInitKey}:{runs.Count}:{runs.FirstOrDefault()?.Id}:{runs.LastOrDefault()?.Id}";
             }));
+    }
 
     private static object CreateMapRun(ForecastRun run) =>
         new
