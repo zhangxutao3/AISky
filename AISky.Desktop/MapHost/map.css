@@ -6,6 +6,15 @@
   --typhoon-text: #17313a;
   --typhoon-muted: #648089;
   --typhoon-stroke: rgba(109, 154, 163, 0.34);
+  --point-surface: rgba(248, 253, 253, 0.92);
+  --point-text: #17313a;
+  --point-muted: #496a73;
+  --point-stroke: rgba(109, 154, 163, 0.36);
+  --point-reading: linear-gradient(135deg, #eefbfa, #f4f9ff);
+  --point-reading-text: #102c37;
+  --point-chart-surface: rgba(221, 242, 243, 0.44);
+  --point-close: #45636b;
+  --point-close-surface: rgba(54, 135, 148, 0.09);
 }
 
 :root[data-theme="dark"] {
@@ -13,6 +22,15 @@
   --typhoon-text: #e8f5f6;
   --typhoon-muted: #9bbbc1;
   --typhoon-stroke: rgba(158, 211, 218, 0.24);
+  --point-surface: rgba(17, 39, 47, 0.93);
+  --point-text: #e8f5f6;
+  --point-muted: #9bbbc1;
+  --point-stroke: rgba(158, 211, 218, 0.24);
+  --point-reading: linear-gradient(135deg, rgba(34, 67, 77, 0.96), rgba(28, 53, 68, 0.96));
+  --point-reading-text: #effafa;
+  --point-chart-surface: rgba(9, 29, 37, 0.48);
+  --point-close: #b9d8dd;
+  --point-close-surface: rgba(140, 210, 219, 0.10);
 }
 
 * {
@@ -67,6 +85,37 @@ body {
 .typhoon-legend[hidden],
 .typhoon-panel[hidden] {
   display: none;
+}
+
+.typhoon-preview {
+  --preview-color: #45c9e9;
+  position: absolute;
+  z-index: 5;
+  width: 24px;
+  height: 24px;
+  pointer-events: none;
+  border: 2px solid var(--preview-color);
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--preview-color) 22%, transparent),
+    0 0 16px color-mix(in srgb, var(--preview-color) 62%, transparent);
+  transform: translate(-50%, -50%);
+  animation: typhoon-preview-pulse 1.15s ease-in-out infinite;
+}
+
+.typhoon-preview[hidden] {
+  display: none;
+}
+
+@keyframes typhoon-preview-pulse {
+  0%, 100% {
+    opacity: 0.68;
+    transform: translate(-50%, -50%) scale(0.78);
+  }
+  50% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.12);
+  }
 }
 
 .typhoon-hover {
@@ -272,9 +321,9 @@ body {
 .coordinates,
 .point-panel {
   position: absolute;
-  color: #17313a;
-  background: rgba(248, 253, 253, 0.92);
-  border: 1px solid rgba(109, 154, 163, 0.36);
+  color: var(--point-text);
+  background: var(--point-surface);
+  border: 1px solid var(--point-stroke);
   box-shadow:
     0 18px 44px rgba(27, 76, 87, 0.16),
     0 2px 8px rgba(27, 76, 87, 0.10);
@@ -288,7 +337,7 @@ body {
   max-width: 360px;
   padding: 8px 11px;
   border-radius: 11px;
-  color: #355760;
+  color: var(--point-muted);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.01em;
@@ -329,7 +378,7 @@ body {
 
 .point-location {
   overflow: hidden;
-  color: #6a858d;
+  color: var(--point-muted);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
@@ -352,8 +401,8 @@ body {
   height: 34px;
   flex: 0 0 auto;
   padding: 0;
-  color: #45636b;
-  background: rgba(54, 135, 148, 0.09);
+  color: var(--point-close);
+  background: var(--point-close-surface);
   border: 0;
   border-radius: 10px;
   cursor: pointer;
@@ -394,9 +443,9 @@ body {
   gap: 2px 7px;
   margin-top: 13px;
   padding: 12px 14px;
-  color: #102c37;
-  background: linear-gradient(135deg, #eefbfa, #f4f9ff);
-  border: 1px solid rgba(80, 177, 182, 0.16);
+  color: var(--point-reading-text);
+  background: var(--point-reading);
+  border: 1px solid var(--point-stroke);
   border-radius: 12px;
 }
 
@@ -410,13 +459,13 @@ body {
 .point-reading > span {
   align-self: flex-end;
   padding-bottom: 4px;
-  color: #496873;
+  color: var(--point-muted);
   font-size: 13px;
 }
 
 .point-reading > div {
   width: 100%;
-  color: #496873;
+  color: var(--point-muted);
   font-size: 12px;
   line-height: 1.4;
 }
@@ -425,7 +474,7 @@ body {
   justify-content: space-between;
   gap: 10px;
   margin-top: 14px;
-  color: #496a73;
+  color: var(--point-muted);
   font-size: 12px;
 }
 
@@ -439,8 +488,8 @@ body {
   height: 132px;
   margin-top: 7px;
   overflow: hidden;
-  background: rgba(221, 242, 243, 0.44);
-  border: 1px solid rgba(71, 150, 159, 0.10);
+  background: var(--point-chart-surface);
+  border: 1px solid var(--point-stroke);
   border-radius: 10px;
 }
 
@@ -448,6 +497,52 @@ body {
   display: block;
   width: 100%;
   height: 100%;
+  cursor: crosshair;
+}
+
+.point-chart__tooltip {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  min-width: 142px;
+  gap: 2px;
+  padding: 8px 10px;
+  pointer-events: none;
+  color: var(--point-text);
+  background: var(--point-surface);
+  border: 1px solid var(--point-stroke);
+  border-radius: 9px;
+  box-shadow: 0 8px 24px rgba(17, 49, 57, 0.18);
+  backdrop-filter: blur(16px) saturate(130%);
+  font-size: 11px;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+  transform-origin: 12px 100%;
+  animation: point-preview-in 150ms ease-out;
+}
+
+.point-chart__tooltip strong {
+  color: var(--point-reading-text);
+  font-size: 12px;
+}
+
+.point-chart__tooltip span {
+  color: var(--point-muted);
+}
+
+.point-chart__tooltip[hidden] {
+  display: none;
+}
+
+@keyframes point-preview-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .point-chart__empty {
@@ -456,7 +551,7 @@ body {
   display: grid;
   place-items: center;
   padding: 16px;
-  color: #6a858d;
+  color: var(--point-muted);
   font-size: 12px;
   text-align: center;
 }
@@ -468,7 +563,7 @@ body {
 .point-chart__axis {
   justify-content: space-between;
   margin-top: 5px;
-  color: #718c94;
+  color: var(--point-muted);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
@@ -476,7 +571,7 @@ body {
 .point-status {
   margin-top: 10px;
   overflow: hidden;
-  color: #6a858d;
+  color: var(--point-muted);
   font-size: 11px;
   line-height: 1.45;
   text-overflow: ellipsis;

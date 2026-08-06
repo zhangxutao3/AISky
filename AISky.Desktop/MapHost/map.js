@@ -2,6 +2,7 @@ const canvas = document.querySelector("#map");
 const context = canvas.getContext("2d", { alpha: false, desynchronized: true });
 const windCanvas = document.querySelector("#wind");
 const windContext = windCanvas.getContext("2d", { alpha: true, desynchronized: true });
+const typhoonPreview = document.querySelector("#typhoonPreview");
 const typhoonHover = document.querySelector("#typhoonHover");
 const typhoonLegend = document.querySelector("#typhoonLegend");
 const typhoonLegendStatus = document.querySelector("#typhoonLegendStatus");
@@ -29,6 +30,7 @@ const pointRange = document.querySelector("#pointRange");
 const pointCount = document.querySelector("#pointCount");
 const pointChart = document.querySelector("#pointChart");
 const pointChartBase = document.createElement("canvas");
+const pointChartTooltip = document.querySelector("#pointChartTooltip");
 const pointChartEmpty = document.querySelector("#pointChartEmpty");
 const pointFirstTime = document.querySelector("#pointFirstTime");
 const pointLastTime = document.querySelector("#pointLastTime");
@@ -60,6 +62,7 @@ let pointSelection = null;
 let pointSeriesData = [];
 let pointChartPoints = [];
 let pointChartRatio = 1;
+let pointChartHoverPoint = null;
 let mapTheme = "light";
 let fieldOpacity = 0.93;
 let showGrid = true;
@@ -454,15 +457,32 @@ function paintPointChartFrame() {
   chartContext.clearRect(0, 0, pointChart.width, pointChart.height);
   chartContext.drawImage(pointChartBase, 0, 0);
   const activePoint = pointChartPoints.find((point) => point?.item.id === activeRun?.id);
-  if (!activePoint) return;
+  if (activePoint) {
+    chartContext.beginPath();
+    chartContext.arc(activePoint.x, activePoint.y, 4.5 * pointChartRatio, 0, Math.PI * 2);
+    chartContext.fillStyle = mapTheme === "dark" ? "#ffd06d" : "#ffb84a";
+    chartContext.fill();
+    chartContext.lineWidth = 2 * pointChartRatio;
+    chartContext.strokeStyle = mapTheme === "dark" ? "#17343d" : "#ffffff";
+    chartContext.stroke();
+  }
 
-  chartContext.beginPath();
-  chartContext.arc(activePoint.x, activePoint.y, 4.5 * pointChartRatio, 0, Math.PI * 2);
-  chartContext.fillStyle = "#ffb84a";
-  chartContext.fill();
-  chartContext.lineWidth = 2 * pointChartRatio;
-  chartContext.strokeStyle = "#ffffff";
-  chartContext.stroke();
+  if (pointChartHoverPoint) {
+    const pulse = 7.5 * pointChartRatio;
+    chartContext.beginPath();
+    chartContext.arc(pointChartHoverPoint.x, pointChartHoverPoint.y, pulse, 0, Math.PI * 2);
+    chartContext.fillStyle = mapTheme === "dark"
+      ? "rgba(75, 211, 220, 0.18)"
+      : "rgba(22, 174, 190, 0.16)";
+    chartContext.fill();
+    chartContext.beginPath();
+    chartContext.arc(pointChartHoverPoint.x, pointChartHoverPoint.y, 3.75 * pointChartRatio, 0, Math.PI * 2);
+    chartContext.fillStyle = mapTheme === "dark" ? "#77edf2" : "#0b9bab";
+    chartContext.fill();
+    chartContext.lineWidth = 1.5 * pointChartRatio;
+    chartContext.strokeStyle = mapTheme === "dark" ? "#17343d" : "#ffffff";
+    chartContext.stroke();
+  }
 }
 
 function drawPointChart(series) {
@@ -475,6 +495,8 @@ function drawPointChart(series) {
   pointChartBase.height = height;
   pointChartRatio = ratio;
   pointChartPoints = [];
+  pointChartHoverPoint = null;
+  pointChartTooltip.hidden = true;
   const chartContext = pointChartBase.getContext("2d");
   chartContext.clearRect(0, 0, width, height);
 
@@ -533,8 +555,12 @@ function drawPointChart(series) {
   });
 
   const area = chartContext.createLinearGradient(0, padding.top, 0, padding.top + plotHeight);
-  area.addColorStop(0, "rgba(37, 190, 198, 0.28)");
-  area.addColorStop(1, "rgba(37, 190, 198, 0.015)");
+  area.addColorStop(0, mapTheme === "dark"
+    ? "rgba(75, 211, 220, 0.25)"
+    : "rgba(37, 190, 198, 0.28)");
+  area.addColorStop(1, mapTheme === "dark"
+    ? "rgba(75, 211, 220, 0.025)"
+    : "rgba(37, 190, 198, 0.015)");
   chartContext.beginPath();
   let firstPoint = null;
   let lastPoint = null;
@@ -570,13 +596,69 @@ function drawPointChart(series) {
       chartContext.lineTo(point.x, point.y);
     }
   }
-  chartContext.strokeStyle = "#16aebe";
+  chartContext.strokeStyle = mapTheme === "dark" ? "#4bd3dc" : "#16aebe";
   chartContext.lineWidth = 2.25 * ratio;
   chartContext.lineJoin = "round";
   chartContext.lineCap = "round";
   chartContext.stroke();
   paintPointChartFrame();
 }
+
+function findNearestPointChartPoint(offsetX) {
+  const x = offsetX * pointChartRatio;
+  const validPoints = pointChartPoints.filter(Boolean);
+  if (validPoints.length === 0) return null;
+  const first = validPoints[0];
+  const last = validPoints.at(-1);
+  if (x < first.x - 8 * pointChartRatio || x > last.x + 8 * pointChartRatio) {
+    return null;
+  }
+  return validPoints.reduce((nearest, point) =>
+    Math.abs(point.x - x) < Math.abs(nearest.x - x) ? point : nearest);
+}
+
+function hidePointChartPreview() {
+  pointChartHoverPoint = null;
+  pointChartTooltip.hidden = true;
+  paintPointChartFrame();
+}
+
+function showPointChartPreview(event) {
+  const point = findNearestPointChartPoint(event.offsetX);
+  if (!point) {
+    hidePointChartPreview();
+    return;
+  }
+  pointChartHoverPoint = point;
+  const layer = activeRun?.layers?.find((item) => item.id === activeLayerId)
+    ?? activeRun?.layers?.[0];
+  const lead = point.item.leadHours;
+  pointChartTooltip.innerHTML =
+    `<strong>${lead >= 0 ? "+" : ""}${lead} 小时</strong>`
+    + `<span>${formatForecastKey(point.item.forecastKey)} ${displayTimeZoneLabel()}</span>`
+    + `<span>${formatValue(point.item.value)} ${layer?.unit || ""}</span>`;
+  pointChartTooltip.hidden = false;
+  const tooltipWidth = 150;
+  const left = Math.max(8, Math.min(pointChart.clientWidth - tooltipWidth - 8, event.offsetX + 10));
+  pointChartTooltip.style.left = `${left}px`;
+  pointChartTooltip.style.top = `${Math.max(7, event.offsetY - 54)}px`;
+  paintPointChartFrame();
+}
+
+pointChart.addEventListener("pointermove", showPointChartPreview);
+pointChart.addEventListener("pointerleave", hidePointChartPreview);
+pointChart.addEventListener("pointercancel", hidePointChartPreview);
+pointChart.addEventListener("click", (event) => {
+  const point = findNearestPointChartPoint(event.offsetX);
+  if (!point) return;
+  pointChartHoverPoint = point;
+  paintPointChartFrame();
+  window.chrome?.webview?.postMessage({
+    type: "select-point-time",
+    forecastKey: point.item.forecastKey,
+    leadHours: point.item.leadHours,
+  });
+});
 
 function updatePointCurrentReading() {
   if (!pointSelection || pointPanel.hidden) return;
@@ -1068,9 +1150,9 @@ function drawTrackPath(points, width, height, longitudeOffset, style) {
     longitudeOffset,
   );
   context.strokeStyle = mapTheme === "dark"
-    ? "rgba(5, 23, 30, 0.76)"
-    : "rgba(255, 255, 255, 0.86)";
-  context.lineWidth = 7 * ratio;
+    ? `rgba(5, 23, 30, ${style.foreground ? 0.76 : 0.34})`
+    : `rgba(255, 255, 255, ${style.foreground ? 0.86 : 0.42})`;
+  context.lineWidth = (style.foreground ? 7 : 5.5) * ratio;
   context.stroke();
   traceSmoothCoordinateLine(
     points.map((point) => [point.lon, point.lat]),
@@ -1079,15 +1161,29 @@ function drawTrackPath(points, width, height, longitudeOffset, style) {
     longitudeOffset,
   );
   context.strokeStyle = style.color;
-  context.globalAlpha = 0.90;
-  context.lineWidth = 4.2 * ratio;
+  context.globalAlpha = style.opacity;
+  context.lineWidth = (style.foreground ? 4.5 : 3.1) * ratio;
   context.shadowColor = style.color;
-  context.shadowBlur = 7 * ratio;
+  context.shadowBlur = (style.foreground ? 7 : 0) * ratio;
   context.stroke();
   context.shadowBlur = 0;
   context.globalAlpha = 1;
   context.setLineDash([]);
   context.restore();
+}
+
+function typhoonStyleForTrack(track) {
+  const base = TYPHOON_MODEL_STYLES[track.model]
+    || { color: "#50bfd0", dash: [] };
+  const foreground = !activeRun?.model || track.model === activeRun.model;
+  return {
+    ...base,
+    color: foreground
+      ? base.color
+      : mapTheme === "dark" ? "#819aa1" : "#82969b",
+    foreground,
+    opacity: foreground ? 0.96 : 0.48,
+  };
 }
 
 function drawTyphoonPaths(width, height) {
@@ -1100,9 +1196,10 @@ function drawTyphoonPaths(width, height) {
   const pointInterval = longitudeSpan <= 40 ? 1 : longitudeSpan <= 80 ? 2 : 4;
   drawGuardLines(width, height, firstCopy, lastCopy);
 
-  for (const track of typhoonTracks) {
-    const style = TYPHOON_MODEL_STYLES[track.model]
-      || { color: "#50bfd0", dash: [] };
+  const orderedTracks = [...typhoonTracks].sort((first, second) =>
+    Number(first.model === activeRun?.model) - Number(second.model === activeRun?.model));
+  for (const track of orderedTracks) {
+    const style = typhoonStyleForTrack(track);
     const displayPoints = window.AISkyTyphoon?.smoothTrackPoints(track.points, 2)
       || track.points;
     for (let copy = firstCopy; copy <= lastCopy; copy += 1) {
@@ -1111,16 +1208,11 @@ function drawTyphoonPaths(width, height) {
       for (let pointIndex = 0; pointIndex < track.points.length; pointIndex += 1) {
         const point = track.points[pointIndex];
         const displayPoint = displayPoints[pointIndex] || point;
-        const isActive = Math.abs(Number(point.leadHours) - activeLead) < 1.5;
+        const isActive = track.model === activeRun?.model
+          && Math.abs(Number(point.leadHours) - activeLead) < 1.5;
         const isSelected = selectedTyphoonPoint
           && selectedTyphoonPoint.track.id === track.id
           && selectedTyphoonPoint.point.forecastKey === point.forecastKey;
-        if (pointIndex % pointInterval !== 0
-          && pointIndex !== track.points.length - 1
-          && !isActive
-          && !isSelected) {
-          continue;
-        }
         const [x, y] = project(
           displayPoint.lon + longitudeOffset,
           displayPoint.lat,
@@ -1131,18 +1223,34 @@ function drawTyphoonPaths(width, height) {
           || y < -18 * ratio || y > height + 18 * ratio) {
           continue;
         }
+        typhoonHitPoints.push({ x, y, point, track });
         const radius = (isActive || isSelected ? 6.2 : 4.2) * ratio;
+        const drawNode = pointIndex % pointInterval === 0
+          || pointIndex === track.points.length - 1
+          || isActive
+          || isSelected;
+        if (!drawNode) {
+          continue;
+        }
         context.save();
         context.beginPath();
         context.arc(x, y, radius, 0, Math.PI * 2);
-        context.fillStyle = point.intensity?.color || style.color;
-        context.shadowColor = point.intensity?.color || style.color;
-        context.shadowBlur = (isActive ? 10 : 4) * ratio;
+        context.fillStyle = style.color;
+        context.globalAlpha = style.foreground ? 1 : 0.72;
+        context.shadowColor = style.color;
+        context.shadowBlur = (style.foreground ? isActive ? 10 : 4 : 0) * ratio;
         context.fill();
         context.shadowBlur = 0;
         context.lineWidth = (isActive || isSelected ? 2.5 : 1.7) * ratio;
         context.strokeStyle = mapTheme === "dark" ? "#edfafa" : "#ffffff";
         context.stroke();
+        if (style.foreground) {
+          context.beginPath();
+          context.arc(x, y, Math.max(1.5, radius * 0.32), 0, Math.PI * 2);
+          context.globalAlpha = 0.94;
+          context.fillStyle = point.intensity?.color || style.color;
+          context.fill();
+        }
         if (isActive || isSelected) {
           context.beginPath();
           context.arc(x, y, 9.5 * ratio, 0, Math.PI * 2);
@@ -1152,7 +1260,6 @@ function drawTyphoonPaths(width, height) {
           context.stroke();
         }
         context.restore();
-        typhoonHitPoints.push({ x, y, point, track });
       }
       const lastPoint = displayPoints.at(-1);
       if (lastPoint && longitudeSpan <= 90) {
@@ -1185,7 +1292,8 @@ function findTyphoonHit(offsetX, offsetY) {
   const y = offsetY * ratio;
   let closest = null;
   let distance = 15 * ratio;
-  for (const item of typhoonHitPoints) {
+  for (let index = typhoonHitPoints.length - 1; index >= 0; index -= 1) {
+    const item = typhoonHitPoints[index];
     const candidate = Math.hypot(item.x - x, item.y - y);
     if (candidate < distance) {
       closest = item;
@@ -1330,6 +1438,12 @@ function resetWindParticle(particle, randomAge = true) {
   particle.lat = view.bottom + Math.random() * (view.top - view.bottom);
   particle.age = randomAge ? Math.floor(Math.random() * 40) : 0;
   particle.maxAge = 28 + Math.floor(Math.random() * 28);
+  particle.trail = [];
+}
+
+function windTrailPointLimit(speed) {
+  const strongWind = Math.max(0, Math.min(1, speed / 32));
+  return Math.round(10 - strongWind * 6);
 }
 
 function stopWindAnimation(clear = true) {
@@ -1358,12 +1472,10 @@ function animateWind(timestamp) {
   }
   if (windParticles.length > targetCount) windParticles.length = targetCount;
 
-  windContext.globalCompositeOperation = "destination-in";
-  windContext.fillStyle = "rgba(0, 0, 0, 0.80)";
-  windContext.fillRect(0, 0, width, height);
+  windContext.clearRect(0, 0, width, height);
   windContext.globalCompositeOperation = "source-over";
   windContext.lineCap = "round";
-  windContext.lineWidth = Math.max(1.25, (window.devicePixelRatio || 1) * 1.12);
+  windContext.lineJoin = "round";
 
   const lonSpan = view.right - view.left;
   const latSpan = view.top - view.bottom;
@@ -1388,15 +1500,27 @@ function animateWind(timestamp) {
       resetWindParticle(particle);
       continue;
     }
-    const x1 = ((particle.lon - view.left) / lonSpan) * width;
-    const y1 = ((view.top - particle.lat) / latSpan) * height;
-    const x2 = ((nextLon - view.left) / lonSpan) * width;
-    const y2 = ((view.top - nextLat) / latSpan) * height;
-    const alpha = 0.34 + Math.min(0.54, speed / 38);
+    if (particle.trail.length === 0) {
+      particle.trail.push([particle.lon, particle.lat]);
+    }
+    particle.trail.push([nextLon, nextLat]);
+    const trailLimit = windTrailPointLimit(speed);
+    while (particle.trail.length > trailLimit) particle.trail.shift();
+
+    const strongWind = Math.max(0, Math.min(1, speed / 32));
+    const alpha = 0.30 + strongWind * 0.36;
     windContext.strokeStyle = `rgba(243, 255, 255, ${alpha})`;
+    windContext.lineWidth = Math.max(
+      1.05,
+      (window.devicePixelRatio || 1) * (1.22 - strongWind * 0.18),
+    );
     windContext.beginPath();
-    windContext.moveTo(x1, y1);
-    windContext.lineTo(x2, y2);
+    particle.trail.forEach((coordinate, index) => {
+      const trailX = ((coordinate[0] - view.left) / lonSpan) * width;
+      const trailY = ((view.top - coordinate[1]) / latSpan) * height;
+      if (index === 0) windContext.moveTo(trailX, trailY);
+      else windContext.lineTo(trailX, trailY);
+    });
     windContext.stroke();
     particle.lon = nextLon;
     particle.lat = nextLat;
@@ -1521,6 +1645,8 @@ canvas.addEventListener("pointerup", (event) => {
 
 canvas.addEventListener("pointercancel", () => {
   dragState = null;
+  typhoonHover.hidden = true;
+  typhoonPreview.hidden = true;
 });
 
 canvas.addEventListener("pointermove", (event) => {
@@ -1555,16 +1681,27 @@ canvas.addEventListener("pointermove", (event) => {
   canvas.style.cursor = typhoonHit ? "pointer" : dragState ? "grabbing" : "grab";
   if (typhoonHit) {
     const { point, track } = typhoonHit;
+    const style = typhoonStyleForTrack(track);
     typhoonHover.hidden = false;
     typhoonHover.style.left = `${event.offsetX}px`;
     typhoonHover.style.top = `${event.offsetY}px`;
+    typhoonPreview.hidden = false;
+    typhoonPreview.style.left = `${event.offsetX}px`;
+    typhoonPreview.style.top = `${event.offsetY}px`;
+    typhoonPreview.style.setProperty("--preview-color", style.color);
     typhoonHover.innerHTML =
-      `<strong>${track.name} · ${point.intensity?.label || "热带气旋"}</strong>`
-      + `${formatForecastKey(point.forecastKey)} ${displayTimeZoneLabel()} · `
+      `<strong>+${point.leadHours} 小时 · ${point.intensity?.label || "热带气旋"}</strong>`
+      + `${formatForecastKey(point.forecastKey)} ${displayTimeZoneLabel()} · ${track.model.replace("AISky-", "")}<br>`
       + `${point.pressure.toFixed(1)} hPa · ${point.windSpeed.toFixed(1)} m/s`;
   } else {
     typhoonHover.hidden = true;
+    typhoonPreview.hidden = true;
   }
+});
+
+canvas.addEventListener("pointerleave", () => {
+  typhoonHover.hidden = true;
+  typhoonPreview.hidden = true;
 });
 
 canvas.addEventListener("click", (event) => {
@@ -1575,7 +1712,15 @@ canvas.addEventListener("click", (event) => {
   const typhoonHit = findTyphoonHit(event.offsetX, event.offsetY);
   if (typhoonHit) {
     typhoonHover.hidden = true;
+    typhoonPreview.hidden = true;
     showTyphoonDetails(typhoonHit);
+    window.chrome?.webview?.postMessage({
+      type: "select-typhoon-time",
+      model: typhoonHit.track.model,
+      initKey: typhoonHit.track.initKey,
+      forecastKey: typhoonHit.point.forecastKey,
+      leadHours: typhoonHit.point.leadHours,
+    });
     return;
   }
   const [lon, lat] = unproject(event.offsetX, event.offsetY);
@@ -1685,7 +1830,11 @@ window.chrome?.webview?.addEventListener("message", (event) => {
     mapTheme = message.theme === "dark" ? "dark" : "light";
     document.documentElement.style.colorScheme = mapTheme;
     document.documentElement.dataset.theme = mapTheme;
-    void render();
+    void render().then(() => {
+      if (!pointPanel.hidden && pointSeriesData.length > 0) {
+        drawPointChart(pointSeriesData);
+      }
+    });
   } else if (message.type === "set-display") {
     fieldOpacity = Math.max(0.35, Math.min(1, Number(message.opacity) || 0.93));
     showGrid = message.showGrid !== false;

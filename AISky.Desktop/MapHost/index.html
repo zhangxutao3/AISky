@@ -10,6 +10,7 @@
   <!-- Visual direction: cloud-white surfaces, slate text, and restrained mint/sky iridescence; the weather map remains the hero. -->
   <canvas id="map" tabindex="0" aria-label="AISky 本地气象地图。拖动平移，滚轮缩放，点击查看格点预报；左右方向键切换时次，空格播放或暂停，Home 恢复全球视图"></canvas>
   <canvas id="wind" aria-hidden="true"></canvas>
+  <div class="typhoon-preview" id="typhoonPreview" aria-hidden="true" hidden></div>
   <div class="typhoon-hover" id="typhoonHover" role="tooltip" hidden></div>
   <div class="typhoon-legend" id="typhoonLegend" aria-live="polite" hidden>
     <div class="typhoon-legend__models">
@@ -77,6 +78,7 @@
     </div>
     <div class="point-chart">
       <canvas id="pointChart" aria-label="该格点的多时次预报曲线"></canvas>
+      <div class="point-chart__tooltip" id="pointChartTooltip" role="tooltip" hidden></div>
       <div class="point-chart__empty" id="pointChartEmpty">正在读取本地预报序列</div>
     </div>
     <div class="point-chart__axis" aria-hidden="true">

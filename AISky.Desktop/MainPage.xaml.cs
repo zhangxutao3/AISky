@@ -205,6 +205,12 @@ public sealed partial class MainPage : Page
                         SetPlaybackState(!_isPlaying);
                     }
                     break;
+                case "select-typhoon-time":
+                    SelectTyphoonForecast(root);
+                    break;
+                case "select-point-time":
+                    SelectPointForecast(root);
+                    break;
                 case "typhoon-status":
                     var status = root.TryGetProperty("status", out var statusNode)
                         ? statusNode.GetString()
@@ -1044,6 +1050,65 @@ public sealed partial class MainPage : Page
         }
         _modelSelectionMadeByUser = true;
         PopulateInitPicker(GetSelectedModel());
+    }
+
+    private void SelectTyphoonForecast(JsonElement message)
+    {
+        var model = message.TryGetProperty("model", out var modelNode)
+            ? modelNode.GetString()
+            : null;
+        var initKey = message.TryGetProperty("initKey", out var initNode)
+            ? initNode.GetString()
+            : null;
+        var forecastKey = message.TryGetProperty("forecastKey", out var forecastNode)
+            ? forecastNode.GetString()
+            : null;
+        var leadHours = message.TryGetProperty("leadHours", out var leadNode)
+            ? leadNode.GetInt32()
+            : int.MinValue;
+        if (string.IsNullOrWhiteSpace(model) || string.IsNullOrWhiteSpace(initKey))
+        {
+            return;
+        }
+
+        var target = _index.Runs.FirstOrDefault(run =>
+            string.Equals(run.Model, model, StringComparison.Ordinal)
+            && string.Equals(run.InitKey, initKey, StringComparison.Ordinal)
+            && (string.Equals(run.ForecastKey, forecastKey, StringComparison.Ordinal)
+                || run.LeadHours == leadHours));
+        if (target is null)
+        {
+            ServiceStatusText.Text = $"{model} 暂无 +{leadHours}h 本地预报";
+            return;
+        }
+
+        _modelSelectionMadeByUser = true;
+        ApplyIndex(_index, model, initKey);
+        var selected = _currentForecastRuns.FirstOrDefault(run => run.Id == target.Id);
+        if (selected is not null)
+        {
+            SelectRun(selected, updateForecastPicker: true);
+        }
+    }
+
+    private void SelectPointForecast(JsonElement message)
+    {
+        var forecastKey = message.TryGetProperty("forecastKey", out var forecastNode)
+            ? forecastNode.GetString()
+            : null;
+        var leadHours = message.TryGetProperty("leadHours", out var leadNode)
+            ? leadNode.GetInt32()
+            : int.MinValue;
+        var selected = _currentForecastRuns.FirstOrDefault(run =>
+            string.Equals(run.ForecastKey, forecastKey, StringComparison.Ordinal)
+            || run.LeadHours == leadHours);
+        if (selected is null)
+        {
+            ServiceStatusText.Text = $"当前起报暂无 +{leadHours}h 本地预报";
+            return;
+        }
+
+        SelectRun(selected, updateForecastPicker: true);
     }
 
     private void InitPicker_SelectionChanged(object sender, SelectionChangedEventArgs e)
