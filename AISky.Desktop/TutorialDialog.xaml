@@ -1,0 +1,392 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ContentDialog
+    x:Class="AISky_Desktop.TutorialDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="快速认识 AISky"
+    CloseButtonText="稍后再看"
+    DefaultButton="Primary"
+    PrimaryButtonClick="ContentDialog_PrimaryButtonClick"
+    PrimaryButtonText="下一步"
+    SecondaryButtonClick="ContentDialog_SecondaryButtonClick"
+    SecondaryButtonText="上一步">
+
+    <Grid Width="520" RowSpacing="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Grid ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <ProgressBar
+                x:Name="TutorialProgress"
+                Height="4"
+                VerticalAlignment="Center"
+                AutomationProperties.Name="教程进度"
+                Foreground="{StaticResource AISkyAccentBrightBrush}"
+                Maximum="6"
+                Minimum="0" />
+            <TextBlock
+                x:Name="TutorialStepCounter"
+                Grid.Column="1"
+                VerticalAlignment="Center"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Style="{StaticResource CaptionTextBlockStyle}"
+                Text="1 / 6" />
+        </Grid>
+
+        <Grid
+            x:Name="TutorialStepContent"
+            Grid.Row="1"
+            MinHeight="408"
+            RenderTransformOrigin="0.5,0.5"
+            RowSpacing="14">
+            <Grid.RenderTransform>
+                <TranslateTransform x:Name="TutorialStepTransform" />
+            </Grid.RenderTransform>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Border
+                Height="116"
+                Padding="14"
+                AutomationProperties.AccessibilityView="Raw"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="14">
+                <Grid>
+                    <Grid x:Name="ForecastIllustration" RowSpacing="12">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="1.05*" />
+                                <ColumnDefinition Width="1.2*" />
+                                <ColumnDefinition Width="1.2*" />
+                            </Grid.ColumnDefinitions>
+                            <Border
+                                Padding="10,5"
+                                Background="{ThemeResource LayerFillColorDefaultBrush}"
+                                CornerRadius="7">
+                                <TextBlock FontSize="12" Text="Energy" />
+                            </Border>
+                            <Border
+                                Grid.Column="1"
+                                Padding="10,5"
+                                Background="{ThemeResource LayerFillColorDefaultBrush}"
+                                CornerRadius="7">
+                                <TextBlock FontSize="12" Text="起报 07:30" />
+                            </Border>
+                            <Border
+                                Grid.Column="2"
+                                Padding="10,5"
+                                Background="{ThemeResource LayerFillColorDefaultBrush}"
+                                CornerRadius="7">
+                                <TextBlock FontSize="12" Text="+3h · 10:30" />
+                            </Border>
+                        </Grid>
+                        <Grid Grid.Row="1" ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="34" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Border
+                                Width="32"
+                                Height="32"
+                                Background="{StaticResource AISkyAccentBrightBrush}"
+                                CornerRadius="16">
+                                <FontIcon
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    FontSize="14"
+                                    Foreground="#FF082B35"
+                                    Glyph="&#xE768;" />
+                            </Border>
+                            <StackPanel
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
+                                Orientation="Horizontal"
+                                Spacing="6">
+                                <Border Padding="9,4" Background="{ThemeResource LayerFillColorDefaultBrush}" CornerRadius="6">
+                                    <TextBlock FontSize="11" Text="00" />
+                                </Border>
+                                <Border Padding="9,4" Background="{ThemeResource AccentFillColorSecondaryBrush}" CornerRadius="6">
+                                    <TextBlock FontSize="11" FontWeight="SemiBold" Text="03" />
+                                </Border>
+                                <Border Padding="9,4" Background="{ThemeResource LayerFillColorDefaultBrush}" CornerRadius="6">
+                                    <TextBlock FontSize="11" Text="06" />
+                                </Border>
+                                <Border Padding="9,4" Background="{ThemeResource LayerFillColorDefaultBrush}" CornerRadius="6">
+                                    <TextBlock FontSize="11" Text="09" />
+                                </Border>
+                                <Border Padding="9,4" Background="{ThemeResource LayerFillColorDefaultBrush}" CornerRadius="6">
+                                    <TextBlock FontSize="11" Text="12" />
+                                </Border>
+                                <TextBlock
+                                    Margin="4,0,0,0"
+                                    VerticalAlignment="Center"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    FontSize="11"
+                                    Text="8 格 = 1 组" />
+                            </StackPanel>
+                        </Grid>
+                    </Grid>
+
+                    <Grid x:Name="MapIllustration" Visibility="Collapsed">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="145" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border
+                            Margin="0,0,12,0"
+                            Padding="10"
+                            Background="{ThemeResource LayerFillColorDefaultBrush}"
+                            CornerRadius="9">
+                            <Grid>
+                                <Canvas Height="66">
+                                    <Line X1="0" X2="105" Y1="18" Y2="18" Stroke="{ThemeResource CardStrokeColorDefaultBrush}" />
+                                    <Line X1="0" X2="105" Y1="40" Y2="40" Stroke="{ThemeResource CardStrokeColorDefaultBrush}" />
+                                    <Path
+                                        Data="M 0,52 C 22,48 28,17 50,27 C 70,38 80,9 105,14"
+                                        Stroke="{StaticResource AISkyAccentBrightBrush}"
+                                        StrokeThickness="3" />
+                                    <Ellipse Canvas.Left="76" Canvas.Top="6" Width="8" Height="8" Fill="{StaticResource AISkySunBrush}" />
+                                </Canvas>
+                            </Grid>
+                        </Border>
+                        <Canvas Grid.Column="1" Height="84">
+                            <Line X1="20" X2="320" Y1="26" Y2="26" Stroke="{ThemeResource CardStrokeColorDefaultBrush}" />
+                            <Line X1="20" X2="320" Y1="58" Y2="58" Stroke="{ThemeResource CardStrokeColorDefaultBrush}" />
+                            <Line X1="92" X2="92" Y1="4" Y2="80" Stroke="{ThemeResource CardStrokeColorDefaultBrush}" />
+                            <Line X1="205" X2="205" Y1="4" Y2="80" Stroke="{ThemeResource CardStrokeColorDefaultBrush}" />
+                            <Path
+                                Data="M 18,63 C 70,36 99,45 137,25 C 178,4 233,27 319,10"
+                                Stroke="{StaticResource AISkyMintBrush}"
+                                StrokeThickness="5" />
+                            <Ellipse Canvas.Left="197" Canvas.Top="15" Width="16" Height="16" Fill="{StaticResource AISkySunBrush}" Stroke="White" StrokeThickness="3" />
+                            <Line X1="205" X2="205" Y1="5" Y2="43" Stroke="{StaticResource AISkySunBrush}" StrokeDashArray="2,2" />
+                            <TextBlock Canvas.Left="222" Canvas.Top="48" FontSize="11" Text="点击地图 → 左侧序列" />
+                        </Canvas>
+                    </Grid>
+
+                    <Grid x:Name="VariableIllustration" ColumnSpacing="18" Visibility="Collapsed">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="190" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="6">
+                            <Border Padding="9,5" Background="{ThemeResource AccentFillColorSecondaryBrush}" CornerRadius="7">
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="18" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Ellipse Fill="{StaticResource AISkySunBrush}" />
+                                    <TextBlock Grid.Column="1" FontSize="12" FontWeight="SemiBold" Text="T2M · 近地面气温" />
+                                </Grid>
+                            </Border>
+                            <Border Padding="9,5" Background="{ThemeResource LayerFillColorDefaultBrush}" CornerRadius="7">
+                                <TextBlock FontSize="12" Text="SLP · 海平面气压" />
+                            </Border>
+                            <Border Padding="9,5" Background="{ThemeResource LayerFillColorDefaultBrush}" CornerRadius="7">
+                                <TextBlock FontSize="12" Text="WIND10 · 10 米风速" />
+                            </Border>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="7">
+                            <TextBlock FontSize="12" FontWeight="SemiBold" Text="点击色带选择方案" />
+                            <Border Height="16" CornerRadius="8">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                        <GradientStop Offset="0" Color="#2B83BA" />
+                                        <GradientStop Offset="0.35" Color="#63C7B2" />
+                                        <GradientStop Offset="0.7" Color="#F5D96B" />
+                                        <GradientStop Offset="1" Color="#D83A63" />
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                            </Border>
+                            <Grid>
+                                <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="11" Text="-10 °C" />
+                                <TextBlock HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="11" Text="可反转 · 按变量记忆" />
+                                <TextBlock HorizontalAlignment="Right" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="11" Text="40 °C" />
+                            </Grid>
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid x:Name="WindIllustration" Visibility="Collapsed">
+                        <Canvas Height="86">
+                            <Path
+                                Data="M 18,63 C 66,5 126,17 168,43 C 212,71 273,67 344,18"
+                                Stroke="#FFEB7891"
+                                StrokeLineJoin="Round"
+                                StrokeThickness="4" />
+                            <Path
+                                Data="M 18,74 C 92,34 151,65 214,30 C 265,2 319,24 408,14"
+                                Stroke="{StaticResource AISkyAccentBrightBrush}"
+                                StrokeDashArray="5,4"
+                                StrokeThickness="2" />
+                            <Line X1="286" X2="286" Y1="4" Y2="82" Stroke="{StaticResource AISkySunBrush}" StrokeDashArray="4,3" StrokeThickness="2" />
+                            <Ellipse Canvas.Left="80" Canvas.Top="10" Width="13" Height="13" Fill="#FFEB7891" Stroke="White" StrokeThickness="2" />
+                            <Ellipse Canvas.Left="161" Canvas.Top="36" Width="13" Height="13" Fill="#FFEB7891" Stroke="White" StrokeThickness="2" />
+                            <Ellipse Canvas.Left="337" Canvas.Top="11" Width="13" Height="13" Fill="#FFEB7891" Stroke="White" StrokeThickness="2" />
+                            <Path Data="M 314,65 C 333,45 352,47 372,63" Stroke="{StaticResource AISkyMintBrush}" StrokeThickness="3" />
+                            <Path Data="M 348,78 C 370,57 394,60 420,39" Stroke="{StaticResource AISkyMintBrush}" StrokeThickness="2" />
+                            <TextBlock Canvas.Left="300" Canvas.Top="0" FontSize="11" Text="24/48h 警戒线" />
+                            <TextBlock Canvas.Left="18" Canvas.Top="0" FontSize="11" FontWeight="SemiBold" Text="模式模拟路径 · 未来 5 天" />
+                        </Canvas>
+                    </Grid>
+
+                    <Grid x:Name="SyncIllustration" ColumnSpacing="18" Visibility="Collapsed">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="54" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border
+                            Width="48"
+                            Height="48"
+                            VerticalAlignment="Center"
+                            Background="{ThemeResource AccentFillColorSecondaryBrush}"
+                            CornerRadius="14">
+                            <FontIcon
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                FontSize="23"
+                                Glyph="&#xE895;" />
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="9">
+                            <Grid ColumnSpacing="10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="62" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="42" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock FontSize="12" FontWeight="SemiBold" Text="Energy" />
+                                <ProgressBar Grid.Column="1" Height="5" Maximum="100" Value="78" />
+                                <TextBlock Grid.Column="2" HorizontalAlignment="Right" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="11" Text="78%" />
+                            </Grid>
+                            <Grid ColumnSpacing="10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="62" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="42" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock FontSize="12" FontWeight="SemiBold" Text="SDS" />
+                                <ProgressBar Grid.Column="1" Height="5" Maximum="100" Value="46" />
+                                <TextBlock Grid.Column="2" HorizontalAlignment="Right" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="11" Text="46%" />
+                            </Grid>
+                            <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="11" Text="两个模型独立同步 · 显示进度与速度" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid x:Name="DisplayIllustration" ColumnSpacing="12" Visibility="Collapsed">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Padding="12" Background="{ThemeResource LayerFillColorDefaultBrush}" CornerRadius="10">
+                            <StackPanel HorizontalAlignment="Center" Spacing="5">
+                                <FontIcon FontSize="20" Glyph="&#xE823;" />
+                                <TextBlock FontSize="12" FontWeight="SemiBold" Text="UTC → UTC+8" />
+                                <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="10" Text="统一转换时间" />
+                            </StackPanel>
+                        </Border>
+                        <Border Grid.Column="1" Padding="12" Background="{ThemeResource LayerFillColorDefaultBrush}" CornerRadius="10">
+                            <StackPanel HorizontalAlignment="Center" Spacing="5">
+                                <FontIcon FontSize="20" Glyph="&#xE706;" />
+                                <TextBlock FontSize="12" FontWeight="SemiBold" Text="明亮 / 深色" />
+                                <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="10" Text="地图同步适配" />
+                            </StackPanel>
+                        </Border>
+                        <Border Grid.Column="2" Padding="12" Background="{ThemeResource LayerFillColorDefaultBrush}" CornerRadius="10">
+                            <StackPanel HorizontalAlignment="Center" Spacing="5">
+                                <FontIcon FontSize="20" Glyph="&#xE7E8;" />
+                                <TextBlock FontSize="12" FontWeight="SemiBold" Text="托盘后台" />
+                                <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="10" Text="关闭后继续同步" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <Grid Grid.Row="1" ColumnSpacing="16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Border
+                    Width="54"
+                    Height="54"
+                    Background="{ThemeResource AccentFillColorSecondaryBrush}"
+                    CornerRadius="15">
+                    <FontIcon
+                        x:Name="TutorialStepIcon"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        AutomationProperties.AccessibilityView="Raw"
+                        FontSize="24"
+                        Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
+                        Glyph="&#xE787;" />
+                </Border>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
+                    <TextBlock
+                        x:Name="TutorialStepTitle"
+                        FontSize="22"
+                        FontWeight="SemiBold"
+                        Text="选择预报"
+                        TextWrapping="Wrap" />
+                    <TextBlock
+                        x:Name="TutorialStepDescription"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Style="{StaticResource BodyTextBlockStyle}"
+                        Text="先确定要浏览的模式与时次。"
+                        TextWrapping="Wrap" />
+                </StackPanel>
+            </Grid>
+
+            <ItemsControl
+                Grid.Row="2"
+                AutomationProperties.Name="本页教程要点"
+                ItemsSource="{x:Bind BulletItems}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Grid Margin="0,5" ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Ellipse
+                                Width="7"
+                                Height="7"
+                                Margin="5,7,0,0"
+                                VerticalAlignment="Top"
+                                Fill="{StaticResource AISkyAccentBrightBrush}" />
+                            <TextBlock
+                                Grid.Column="1"
+                                FontSize="14"
+                                LineHeight="21"
+                                Text="{Binding}"
+                                TextWrapping="Wrap" />
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </Grid>
+
+        <CheckBox
+            x:Name="DoNotShowAgainCheckBox"
+            Grid.Row="2"
+            AutomationProperties.HelpText="仍可从左上角更多菜单重新打开教程"
+            Content="不再自动弹出（仍可从“…”菜单重新打开）" />
+    </Grid>
+</ContentDialog>

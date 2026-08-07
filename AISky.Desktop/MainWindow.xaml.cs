@@ -31,6 +31,7 @@ public sealed partial class MainWindow : Window
     public MainWindow(bool startInTray = false)
     {
         _startInTray = startInTray;
+        _hiddenToTray = startInTray;
         InitializeComponent();
 
         ExtendsContentIntoTitleBar = true;
@@ -89,6 +90,7 @@ public sealed partial class MainWindow : Window
         }
 
         args.Cancel = true;
+        (RootFrame.Content as MainPage)?.PrepareTrayReveal();
         _hiddenToTray = true;
         AppWindow.IsShownInSwitchers = false;
         AppWindow.Hide();
@@ -105,7 +107,10 @@ public sealed partial class MainWindow : Window
     public void ShowFromTray()
     {
         var page = RootFrame.Content as MainPage;
-        var showReveal = page?.PrepareTrayReveal() == true;
+        var wasHidden = _hiddenToTray;
+        var showReveal = wasHidden
+            && (page?.HasPreparedTrayReveal == true
+                || page?.PrepareTrayReveal() == true);
         _hiddenToTray = false;
         AppWindow.IsShownInSwitchers = true;
         AppWindow.Show();
@@ -114,8 +119,17 @@ public sealed partial class MainWindow : Window
         {
             page!.PlayTrayReveal();
         }
-        TryShowPendingUpdate();
+        else if (wasHidden)
+        {
+            page?.RequestAutomaticTutorial();
+        }
+        else
+        {
+            TryShowPendingUpdate();
+        }
     }
+
+    public bool IsHiddenToTray => _hiddenToTray;
 
     public void RestartAfterDataMove()
     {

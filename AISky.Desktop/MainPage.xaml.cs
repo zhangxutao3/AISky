@@ -39,6 +39,9 @@ public sealed partial class MainPage : Page
     private bool _firstRunBusy;
     private bool _startupDataReady;
     private bool _modelSelectionMadeByUser;
+    private bool _tutorialOpen;
+    private bool _tutorialQueued;
+    private bool _trayRevealPrepared;
     private int _firstRunCurrentItem;
     private int _currentForecastIndex;
     private int _lastTimelineSelectionIndex = -1;
@@ -150,6 +153,9 @@ public sealed partial class MainPage : Page
             }
         }
     }
+
+    private async void TutorialButton_Click(object sender, RoutedEventArgs e) =>
+        await ShowTutorialAsync(automatic: false);
 
     private async void CoreWebView2_WebMessageReceived(
         object? sender,
@@ -2199,19 +2205,23 @@ public sealed partial class MainPage : Page
         {
             return;
         }
+
+        if (((Application.Current as App)?.MainWindow as MainWindow)?.IsHiddenToTray == true)
+        {
+            return;
+        }
+
         AnimateStartupCoverAway();
-        ((Application.Current as App)?.MainWindow as MainWindow)?.TryShowPendingUpdate();
     }
 
     public bool PrepareTrayReveal()
     {
-        if (!_mapReady
-            || StartupCover.Visibility == Visibility.Visible
-            || FirstRunOverlay.Visibility == Visibility.Visible)
+        if (!_mapReady)
         {
             return false;
         }
 
+        _trayRevealPrepared = true;
         StartupProgressBar.Visibility = Visibility.Collapsed;
         StartupStatusText.Text = "正在恢复预报工作区";
         StartupCover.Opacity = 1;
@@ -2222,7 +2232,87 @@ public sealed partial class MainPage : Page
         return true;
     }
 
-    public void PlayTrayReveal() => AnimateStartupCoverAway(80);
+    public bool HasPreparedTrayReveal =>
+        _mapReady
+        && (_trayRevealPrepared || StartupCover.Visibility == Visibility.Visible);
+
+    public void PlayTrayReveal()
+    {
+        _trayRevealPrepared = false;
+        AnimateStartupCoverAway(420);
+    }
+
+    public void RequestAutomaticTutorial(int delayMilliseconds = 180)
+    {
+        if (_tutorialQueued || _tutorialOpen)
+        {
+            return;
+        }
+
+        _tutorialQueued = true;
+        _ = ShowAutomaticTutorialAfterDelayAsync(delayMilliseconds);
+    }
+
+    private async Task ShowAutomaticTutorialAfterDelayAsync(int delayMilliseconds)
+    {
+        try
+        {
+            await Task.Delay(Math.Max(0, delayMilliseconds));
+            if (XamlRoot is null || StartupCover.Visibility == Visibility.Visible)
+            {
+                return;
+            }
+            await ShowTutorialAsync(automatic: true);
+        }
+        finally
+        {
+            _tutorialQueued = false;
+        }
+    }
+
+    private async Task ShowTutorialAsync(bool automatic)
+    {
+        await App.Services.InitializeAsync();
+        var settings = App.Services.CurrentSettings;
+        if (_tutorialOpen || (automatic && !settings.ShowTutorialOnOpen))
+        {
+            ((Application.Current as App)?.MainWindow as MainWindow)
+                ?.TryShowPendingUpdate();
+            return;
+        }
+
+        _tutorialOpen = true;
+        try
+        {
+            var dialog = new TutorialDialog(settings.ShowTutorialOnOpen)
+            {
+                XamlRoot = XamlRoot,
+                RequestedTheme = RootLayout.ActualTheme,
+            };
+            await dialog.ShowAsync();
+            var showOnOpen = !dialog.SuppressAutomaticOpening;
+            if (showOnOpen != App.Services.CurrentSettings.ShowTutorialOnOpen)
+            {
+                await App.Services.UpdateSettingsAsync(
+                    App.Services.CurrentSettings with
+                    {
+                        ShowTutorialOnOpen = showOnOpen,
+                    });
+            }
+        }
+        catch (InvalidOperationException exception)
+        {
+            await App.Services.Log.WriteAsync(
+                "WARN",
+                $"Tutorial dialog was deferred because another dialog is open: {exception.Message}");
+        }
+        finally
+        {
+            _tutorialOpen = false;
+            ((Application.Current as App)?.MainWindow as MainWindow)
+                ?.TryShowPendingUpdate();
+        }
+    }
 
     private void AnimateStartupCoverAway(int beginDelayMilliseconds = 100)
     {
@@ -2255,6 +2345,7 @@ public sealed partial class MainPage : Page
             {
                 From = 0.97,
                 To = 1.015,
+                BeginTime = TimeSpan.FromMilliseconds(beginDelayMilliseconds),
                 Duration = TimeSpan.FromMilliseconds(280),
                 EasingFunction = easing,
             };
@@ -2272,6 +2363,7 @@ public sealed partial class MainPage : Page
             StartupContentTransform.ScaleY = 1;
             StartupProgressBar.Visibility = Visibility.Visible;
             StartupStatusText.Text = "正在准备本地预报环境";
+            RequestAutomaticTutorial();
         };
         storyboard.Begin();
     }

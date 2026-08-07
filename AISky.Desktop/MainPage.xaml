@@ -301,6 +301,14 @@
                             </AppBarToggleButton.Icon>
                         </AppBarToggleButton>
                         <AppBarButton
+                            AutomationProperties.Name="打开新手教程"
+                            Click="TutorialButton_Click"
+                            Label="新手教程">
+                            <AppBarButton.Icon>
+                                <FontIcon Glyph="&#xE897;" />
+                            </AppBarButton.Icon>
+                        </AppBarButton>
+                        <AppBarButton
                             Click="SettingsButton_Click"
                             Icon="Setting"
                             Label="设置" />
