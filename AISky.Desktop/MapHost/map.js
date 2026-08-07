@@ -35,6 +35,7 @@ const pointChartEmpty = document.querySelector("#pointChartEmpty");
 const pointFirstTime = document.querySelector("#pointFirstTime");
 const pointLastTime = document.querySelector("#pointLastTime");
 const pointStatus = document.querySelector("#pointStatus");
+const mapMath = window.AISkyMapMath;
 
 const initialView = { left: 45, right: 165, top: 72, bottom: 5 };
 const worldView = { left: -180, right: 180, top: 85, bottom: -85 };
@@ -77,6 +78,8 @@ let windLastFrame = 0;
 let prefetchGeneration = 0;
 let lastViewportWidth = 0;
 let lastViewportHeight = 0;
+let mapRenderRatio = 1;
+let windRenderRatio = 1;
 let interactionActive = false;
 let interactionEndTimer = 0;
 let typhoonModels = [];
@@ -87,6 +90,10 @@ let typhoonWorker = null;
 let typhoonRequestId = 0;
 let typhoonAnalysisKey = "";
 const typhoonTrackCache = new Map();
+const FIELD_CACHE_LIMIT = 6;
+const SAMPLE_CACHE_LIMIT = 8;
+const MAP_PIXEL_BUDGET = 9_000_000;
+const WIND_PIXEL_BUDGET = 2_600_000;
 
 const TYPHOON_MODEL_STYLES = {
   "AISky-Energy": { color: "#ff7891", dash: [] },
@@ -115,46 +122,84 @@ function clamp(value, minimum, maximum) {
 }
 
 function wrapLongitude(lon) {
-  return ((lon + 180) % 360 + 360) % 360 - 180;
+  return mapMath.wrapLongitude(lon);
 }
 
 function setConstrainedView(candidate) {
-  const width = clamp(candidate.right - candidate.left, 12, 720);
-  const height = clamp(candidate.top - candidate.bottom, 8, 170);
-  const left = wrapLongitude(candidate.left);
-  const top = clamp(candidate.top, worldView.bottom + height, worldView.top);
-  Object.assign(view, {
-    left,
-    right: left + width,
-    top,
-    bottom: top - height,
-  });
+  const width = Math.max(1, canvas.clientWidth || lastViewportWidth);
+  const height = Math.max(1, canvas.clientHeight || lastViewportHeight);
+  Object.assign(view, mapMath.constrainCandidate(candidate, width, height));
 }
 
 function resizeViewForViewport(width, height, force = false) {
   if (width <= 0 || height <= 0) return;
   if (!force && width === lastViewportWidth && height === lastViewportHeight) return;
 
-  const longitudeSpan = view.right - view.left;
-  const latitudeSpan = view.top - view.bottom;
-  const referenceWidth = lastViewportWidth || width;
-  const referenceHeight = lastViewportHeight || height;
-  const degreesPerPixel = Math.max(
-    longitudeSpan / referenceWidth,
-    latitudeSpan / referenceHeight,
+  Object.assign(
+    view,
+    mapMath.resizeView(
+      view,
+      lastViewportWidth || width,
+      lastViewportHeight || height,
+      width,
+      height,
+    ),
   );
-  const targetWidth = clamp(degreesPerPixel * width, 12, 720);
-  const targetHeight = clamp(degreesPerPixel * height, 8, 170);
-  const centerLongitude = (view.left + view.right) / 2;
-  const centerLatitude = (view.top + view.bottom) / 2;
-  setConstrainedView({
-    left: centerLongitude - targetWidth / 2,
-    right: centerLongitude + targetWidth / 2,
-    top: centerLatitude + targetHeight / 2,
-    bottom: centerLatitude - targetHeight / 2,
-  });
   lastViewportWidth = width;
   lastViewportHeight = height;
+}
+
+function resetToWorldView() {
+  Object.assign(
+    view,
+    mapMath.fitBounds(worldView, canvas.clientWidth, canvas.clientHeight),
+  );
+  lastViewportWidth = Math.max(1, canvas.clientWidth);
+  lastViewportHeight = Math.max(1, canvas.clientHeight);
+}
+
+function releaseFieldTexture(field) {
+  if (!field?.texture) return;
+  field.texture.width = 1;
+  field.texture.height = 1;
+  delete field.texture;
+}
+
+function getCachedField(key) {
+  if (!fieldCache.has(key)) return null;
+  const value = fieldCache.get(key);
+  fieldCache.delete(key);
+  fieldCache.set(key, value);
+  return value;
+}
+
+function cacheField(key, field) {
+  if (fieldCache.has(key)) fieldCache.delete(key);
+  fieldCache.set(key, field);
+  while (fieldCache.size > FIELD_CACHE_LIMIT) {
+    const protectedFields = new Set([activeField, windField]);
+    const eviction = [...fieldCache.entries()]
+      .find(([, candidate]) => !protectedFields.has(candidate));
+    if (!eviction) break;
+    fieldCache.delete(eviction[0]);
+    releaseFieldTexture(eviction[1]);
+  }
+}
+
+function getCachedSample(key) {
+  if (!sampleCache.has(key)) return null;
+  const value = sampleCache.get(key);
+  sampleCache.delete(key);
+  sampleCache.set(key, value);
+  return value;
+}
+
+function cacheSample(key, values) {
+  if (sampleCache.has(key)) sampleCache.delete(key);
+  sampleCache.set(key, values);
+  while (sampleCache.size > SAMPLE_CACHE_LIMIT) {
+    sampleCache.delete(sampleCache.keys().next().value);
+  }
 }
 
 function project(lon, lat, width, height) {
@@ -425,15 +470,15 @@ function refreshTyphoonAnalysis() {
 
 async function loadSample(layer) {
   if (!layer?.sampleUrl) return null;
-  if (sampleCache.has(layer.sampleUrl)) return sampleCache.get(layer.sampleUrl);
+  const cached = getCachedSample(layer.sampleUrl);
+  if (cached) return cached;
   const response = await fetch(layer.sampleUrl, { cache: "force-cache" });
   if (!response.ok) throw new Error(`抽样缓存读取失败：HTTP ${response.status}`);
   const values = await response.json();
   if (!Array.isArray(values) || !Array.isArray(values[0])) {
     throw new Error("抽样缓存格式无效");
   }
-  sampleCache.set(layer.sampleUrl, values);
-  while (sampleCache.size > 24) sampleCache.delete(sampleCache.keys().next().value);
+  cacheSample(layer.sampleUrl, values);
   return values;
 }
 
@@ -837,7 +882,7 @@ function drawRealField(width, height, field) {
     const sourceWidth = ((visibleRight - visibleLeft) / 360) * raster.width;
     const destinationX = ((visibleLeft - view.left) / longitudeSpan) * width;
     const destinationWidth = ((visibleRight - visibleLeft) / longitudeSpan) * width;
-    const overlap = Math.min(1.5 * window.devicePixelRatio, destinationWidth * 0.01);
+    const overlap = Math.min(1.5 * mapRenderRatio, destinationWidth * 0.01);
     const drawX = Math.max(0, destinationX - (visibleLeft > view.left ? overlap : 0));
     const drawRight = Math.min(
       width,
@@ -869,10 +914,14 @@ function drawGrid(width, height) {
     ? "rgba(181, 222, 229, 0.15)"
     : "rgba(29, 73, 84, 0.18)";
   const labelFill = mapTheme === "dark"
-    ? "rgba(236, 247, 249, 0.92)"
+    ? activeField
+      ? "rgba(7, 38, 48, 0.96)"
+      : "rgba(151, 211, 219, 0.92)"
     : "rgba(6, 38, 48, 0.94)";
   const labelHalo = mapTheme === "dark"
-    ? "rgba(6, 26, 34, 0.86)"
+    ? activeField
+      ? "rgba(197, 231, 235, 0.72)"
+      : "rgba(6, 26, 34, 0.82)"
     : "rgba(248, 253, 253, 0.86)";
   context.lineWidth = Math.max(1, ratio);
   context.strokeStyle = gridStroke;
@@ -954,18 +1003,18 @@ function drawWrappedLines(lines, width, height, firstCopy, lastCopy) {
 
 function drawHydrology(width, height, firstCopy, lastCopy) {
   const longitudeSpan = view.right - view.left;
-  if (longitudeSpan > 240) return;
+  if (longitudeSpan > 240 || interactionActive) return;
 
   context.save();
   context.lineJoin = "round";
   context.lineCap = "round";
   context.fillStyle = mapTheme === "dark"
-    ? "rgba(91, 185, 207, 0.22)"
+    ? "rgba(40, 142, 181, 0.20)"
     : "rgba(119, 207, 224, 0.28)";
   context.strokeStyle = mapTheme === "dark"
-    ? "rgba(132, 211, 229, 0.58)"
+    ? "rgba(30, 132, 177, 0.80)"
     : "rgba(35, 125, 157, 0.46)";
-  context.lineWidth = 0.8 * window.devicePixelRatio;
+  context.lineWidth = 0.8 * mapRenderRatio;
   for (let copy = firstCopy; copy <= lastCopy; copy += 1) {
     const longitudeOffset = copy * 360;
     for (const polygon of lakes) {
@@ -977,9 +1026,9 @@ function drawHydrology(width, height, firstCopy, lastCopy) {
   }
   if (longitudeSpan <= 180) {
     context.strokeStyle = mapTheme === "dark"
-      ? "rgba(133, 214, 231, 0.62)"
+      ? "rgba(25, 126, 178, 0.88)"
       : "rgba(35, 126, 158, 0.52)";
-    context.lineWidth = 0.72 * window.devicePixelRatio;
+    context.lineWidth = 0.72 * mapRenderRatio;
     drawWrappedLines(rivers, width, height, firstCopy, lastCopy);
   }
   context.restore();
@@ -993,40 +1042,50 @@ function drawCoastlines(width, height) {
 
   context.save();
   context.strokeStyle = mapTheme === "dark"
-    ? "rgba(216, 237, 240, 0.74)"
+    ? activeField
+      ? "rgba(10, 42, 52, 0.88)"
+      : "rgba(111, 184, 195, 0.82)"
     : "rgba(16, 55, 66, 0.78)";
-  context.lineWidth = 1.1 * window.devicePixelRatio;
+  context.lineWidth = 1.1 * mapRenderRatio;
   context.lineJoin = "round";
   context.lineCap = "round";
   drawWrappedLines(coastlines, width, height, firstCopy, lastCopy);
 
   context.strokeStyle = mapTheme === "dark"
-    ? "rgba(218, 237, 240, 0.58)"
+    ? activeField
+      ? "rgba(14, 50, 59, 0.72)"
+      : "rgba(101, 168, 180, 0.64)"
     : "rgba(18, 58, 68, 0.62)";
-  context.lineWidth = (longitudeSpan > 240 ? 0.58 : 0.82) * window.devicePixelRatio;
+  context.lineWidth = (longitudeSpan > 240 ? 0.58 : 0.82) * mapRenderRatio;
   drawWrappedLines(countryBorders, width, height, firstCopy, lastCopy);
 
-  if (longitudeSpan <= 110) {
+  if (longitudeSpan <= 110 && !interactionActive) {
     context.strokeStyle = mapTheme === "dark"
-      ? "rgba(197, 228, 233, 0.42)"
+      ? activeField
+        ? "rgba(24, 65, 73, 0.58)"
+        : "rgba(92, 157, 168, 0.50)"
       : "rgba(30, 75, 84, 0.42)";
-    context.lineWidth = 0.62 * window.devicePixelRatio;
-    context.setLineDash([2.2 * window.devicePixelRatio, 2.8 * window.devicePixelRatio]);
+    context.lineWidth = 0.62 * mapRenderRatio;
+    context.setLineDash([2.2 * mapRenderRatio, 2.8 * mapRenderRatio]);
     drawWrappedLines(provinceBorders, width, height, firstCopy, lastCopy);
     context.setLineDash([]);
   }
 
   context.fillStyle = mapTheme === "dark"
-    ? "rgba(231, 243, 245, 0.90)"
+    ? activeField
+      ? "rgba(13, 49, 59, 0.92)"
+      : "rgba(171, 218, 224, 0.92)"
     : "rgba(13, 57, 70, 0.88)";
   context.strokeStyle = mapTheme === "dark"
-    ? "rgba(8, 31, 40, 0.88)"
+    ? activeField
+      ? "rgba(218, 239, 241, 0.78)"
+      : "rgba(8, 31, 40, 0.88)"
     : "rgba(238, 247, 245, 0.88)";
-  context.lineWidth = 3 * window.devicePixelRatio;
+  context.lineWidth = 3 * mapRenderRatio;
   context.lineJoin = "round";
-  context.font = `600 ${12 * window.devicePixelRatio}px "Segoe UI Variable"`;
+  context.font = `600 ${12 * mapRenderRatio}px "Segoe UI Variable"`;
   context.textBaseline = "alphabetic";
-  if (!showPlaces) {
+  if (!showPlaces || interactionActive) {
     context.restore();
     return;
   }
@@ -1049,12 +1108,12 @@ function drawCoastlines(width, height) {
     .sort((first, second) => first.rank - second.rank);
   for (const place of candidates) {
     const [x, y] = project(place.displayLon, place.lat, width, height);
-    const labelX = x + 5 * window.devicePixelRatio;
-    const labelY = y - 5 * window.devicePixelRatio;
+    const labelX = x + 5 * mapRenderRatio;
+    const labelY = y - 5 * mapRenderRatio;
     const labelWidth = context.measureText(place.name).width;
     const box = {
       left: labelX - 3,
-      top: labelY - 14 * window.devicePixelRatio,
+      top: labelY - 14 * mapRenderRatio,
       right: labelX + labelWidth + 3,
       bottom: labelY + 3,
     };
@@ -1118,7 +1177,7 @@ function traceSmoothCoordinateLine(points, width, height, longitudeOffset = 0) {
 }
 
 function drawRoundedLabel(text, x, y, color, width, height) {
-  const ratio = window.devicePixelRatio || 1;
+  const ratio = mapRenderRatio;
   context.save();
   context.font = `650 ${11 * ratio}px "Segoe UI Variable", "Microsoft YaHei UI"`;
   const paddingX = 7 * ratio;
@@ -1143,7 +1202,7 @@ function drawRoundedLabel(text, x, y, color, width, height) {
 }
 
 function drawGuardLines(width, height, firstCopy, lastCopy) {
-  const ratio = window.devicePixelRatio || 1;
+  const ratio = mapRenderRatio;
   const guardColor = mapTheme === "dark" ? "#f8d66d" : "#d9a51c";
   const haloColor = mapTheme === "dark"
     ? "rgba(20, 34, 39, 0.70)"
@@ -1178,7 +1237,7 @@ function drawGuardLines(width, height, firstCopy, lastCopy) {
 
 function drawTrackPath(points, width, height, longitudeOffset, style) {
   if (points.length < 2) return;
-  const ratio = window.devicePixelRatio || 1;
+  const ratio = mapRenderRatio;
   context.save();
   context.lineJoin = "round";
   context.lineCap = "round";
@@ -1231,7 +1290,7 @@ function drawTyphoonPaths(width, height) {
   if (!showTyphoonPaths) return;
   const firstCopy = Math.floor((view.left + 180) / 360) - 1;
   const lastCopy = Math.floor((view.right + 180) / 360) + 1;
-  const ratio = window.devicePixelRatio || 1;
+  const ratio = mapRenderRatio;
   const longitudeSpan = view.right - view.left;
   const pointInterval = longitudeSpan <= 40 ? 1 : longitudeSpan <= 80 ? 2 : 4;
   drawGuardLines(width, height, firstCopy, lastCopy);
@@ -1380,10 +1439,10 @@ function drawPointMarker(width, height) {
   if (x < -20 || y < -20 || x > width + 20 || y > height + 20) return;
   context.save();
   context.beginPath();
-  context.arc(x, y, 7 * window.devicePixelRatio, 0, Math.PI * 2);
+  context.arc(x, y, 7 * mapRenderRatio, 0, Math.PI * 2);
   context.fillStyle = "#e43b32";
   context.fill();
-  context.lineWidth = 3 * window.devicePixelRatio;
+  context.lineWidth = 3 * mapRenderRatio;
   context.strokeStyle = "#ffffff";
   context.stroke();
   context.restore();
@@ -1391,7 +1450,8 @@ function drawPointMarker(width, height) {
 
 async function loadField(run, layer) {
   const cacheKey = layer.fieldUrl;
-  if (fieldCache.has(cacheKey)) return fieldCache.get(cacheKey);
+  const cached = getCachedField(cacheKey);
+  if (cached) return cached;
   const response = await fetch(cacheKey, { cache: "force-cache" });
   if (!response.ok) throw new Error(`栅格缓存读取失败：HTTP ${response.status}`);
   const buffer = await response.arrayBuffer();
@@ -1401,8 +1461,7 @@ async function loadField(run, layer) {
     throw new Error(`栅格尺寸不匹配：期望 ${expected}，实际 ${values.length}`);
   }
   const field = { values, info: layer.fieldInfo, grid: run.grid, layer };
-  fieldCache.set(cacheKey, field);
-  while (fieldCache.size > 6) fieldCache.delete(fieldCache.keys().next().value);
+  cacheField(cacheKey, field);
   return field;
 }
 
@@ -1410,7 +1469,8 @@ async function loadWindField(run) {
   const layer = run?.layers?.find((item) => item.id === "wind10" && item.vector);
   if (!layer?.vector) return null;
   const cacheKey = `${layer.vector.uUrl}|${layer.vector.vUrl}`;
-  if (fieldCache.has(cacheKey)) return fieldCache.get(cacheKey);
+  const cached = getCachedField(cacheKey);
+  if (cached) return cached;
   const [uResponse, vResponse] = await Promise.all([
     fetch(layer.vector.uUrl, { cache: "force-cache" }),
     fetch(layer.vector.vUrl, { cache: "force-cache" }),
@@ -1430,8 +1490,7 @@ async function loadWindField(run) {
     throw new Error("风场矢量尺寸不匹配");
   }
   const field = { uValues, vValues, info, grid: run.grid, layer, runId: run.id };
-  fieldCache.set(cacheKey, field);
-  while (fieldCache.size > 8) fieldCache.delete(fieldCache.keys().next().value);
+  cacheField(cacheKey, field);
   return field;
 }
 
@@ -1463,9 +1522,16 @@ function scheduleFramePrefetch(run, layerId) {
 }
 
 function resizeWindCanvas() {
-  const ratio = Math.min(window.devicePixelRatio || 1, 2);
-  const width = Math.max(1, Math.round(windCanvas.clientWidth * ratio));
-  const height = Math.max(1, Math.round(windCanvas.clientHeight * ratio));
+  windRenderRatio = mapMath.boundedCanvasRatio(
+    windCanvas.clientWidth,
+    windCanvas.clientHeight,
+    window.devicePixelRatio || 1,
+    WIND_PIXEL_BUDGET,
+    1,
+    0.6,
+  );
+  const width = Math.max(1, Math.round(windCanvas.clientWidth * windRenderRatio));
+  const height = Math.max(1, Math.round(windCanvas.clientHeight * windRenderRatio));
   if (windCanvas.width !== width || windCanvas.height !== height) {
     windCanvas.width = width;
     windCanvas.height = height;
@@ -1478,7 +1544,8 @@ function resetWindParticle(particle, randomAge = true) {
   particle.lat = view.bottom + Math.random() * (view.top - view.bottom);
   particle.age = randomAge ? Math.floor(Math.random() * 40) : 0;
   particle.maxAge = 28 + Math.floor(Math.random() * 28);
-  particle.trail = [];
+  if (particle.trail) particle.trail.length = 0;
+  else particle.trail = [];
 }
 
 function windTrailPointLimit(speed) {
@@ -1541,39 +1608,41 @@ function animateWind(timestamp) {
       continue;
     }
     if (particle.trail.length === 0) {
-      particle.trail.push([particle.lon, particle.lat]);
+      particle.trail.push(particle.lon, particle.lat);
     }
-    particle.trail.push([nextLon, nextLat]);
+    particle.trail.push(nextLon, nextLat);
     const trailLimit = windTrailPointLimit(speed);
-    while (particle.trail.length > trailLimit) particle.trail.shift();
+    while (particle.trail.length > trailLimit * 2) {
+      particle.trail.splice(0, 2);
+    }
 
     const strongWind = Math.max(0, Math.min(1, speed / 32));
     const alpha = 0.30 + strongWind * 0.36;
     windContext.lineWidth = Math.max(
       1.2,
-      (window.devicePixelRatio || 1) * (1.46 - strongWind * 0.18),
+      windRenderRatio * (1.46 - strongWind * 0.18),
     );
-    const projectedTrail = particle.trail.map((coordinate) => [
-      ((coordinate[0] - view.left) / lonSpan) * width,
-      ((view.top - coordinate[1]) / latSpan) * height,
-    ]);
-    const tail = projectedTrail[0];
-    const head = projectedTrail.at(-1);
+    const tailX = ((particle.trail[0] - view.left) / lonSpan) * width;
+    const tailY = ((view.top - particle.trail[1]) / latSpan) * height;
+    const headX = ((particle.trail.at(-2) - view.left) / lonSpan) * width;
+    const headY = ((view.top - particle.trail.at(-1)) / latSpan) * height;
     const trailGradient = windContext.createLinearGradient(
-      tail[0],
-      tail[1],
-      head[0] + 0.001,
-      head[1] + 0.001,
+      tailX,
+      tailY,
+      headX + 0.001,
+      headY + 0.001,
     );
     trailGradient.addColorStop(0, "rgba(205, 247, 250, 0)");
     trailGradient.addColorStop(0.42, `rgba(224, 251, 253, ${alpha * 0.28})`);
     trailGradient.addColorStop(1, `rgba(248, 255, 255, ${alpha})`);
     windContext.strokeStyle = trailGradient;
     windContext.beginPath();
-    projectedTrail.forEach((coordinate, index) => {
-      if (index === 0) windContext.moveTo(coordinate[0], coordinate[1]);
-      else windContext.lineTo(coordinate[0], coordinate[1]);
-    });
+    for (let index = 0; index < particle.trail.length; index += 2) {
+      const x = ((particle.trail[index] - view.left) / lonSpan) * width;
+      const y = ((view.top - particle.trail[index + 1]) / latSpan) * height;
+      if (index === 0) windContext.moveTo(x, y);
+      else windContext.lineTo(x, y);
+    }
     windContext.stroke();
     particle.lon = nextLon;
     particle.lat = nextLat;
@@ -1604,15 +1673,19 @@ async function refreshWindAnimation(generation) {
 
 async function render() {
   const generation = ++renderGeneration;
-  const ratio = Math.min(
-    window.devicePixelRatio || 1,
-    interactionActive ? 1.25 : 2,
-  );
   const clientWidth = Math.max(1, canvas.clientWidth);
   const clientHeight = Math.max(1, canvas.clientHeight);
+  mapRenderRatio = mapMath.boundedCanvasRatio(
+    clientWidth,
+    clientHeight,
+    window.devicePixelRatio || 1,
+    MAP_PIXEL_BUDGET,
+    1.5,
+    0.7,
+  );
   resizeViewForViewport(clientWidth, clientHeight);
-  const width = Math.round(clientWidth * ratio);
-  const height = Math.round(clientHeight * ratio);
+  const width = Math.round(clientWidth * mapRenderRatio);
+  const height = Math.round(clientHeight * mapRenderRatio);
   if (canvas.width !== width || canvas.height !== height) {
     canvas.width = width;
     canvas.height = height;
@@ -1843,7 +1916,7 @@ document.addEventListener("keydown", (event) => {
     window.chrome?.webview?.postMessage({ type: "toggle-playback" });
   } else if (event.key === "Home") {
     event.preventDefault();
-    Object.assign(view, worldView);
+    resetToWorldView();
     requestRender();
   }
 });
@@ -1853,8 +1926,8 @@ canvas.addEventListener("wheel", (event) => {
   beginMapInteraction();
   const [focusLon, focusLat] = unproject(event.offsetX, event.offsetY);
   const factor = event.deltaY < 0 ? 0.82 : 1.22;
-  const nextWidth = clamp((view.right - view.left) * factor, 12, 360);
-  const nextHeight = clamp((view.top - view.bottom) * factor, 8, 170);
+  const nextWidth = (view.right - view.left) * factor;
+  const nextHeight = (view.top - view.bottom) * factor;
   const xRatio = event.offsetX / canvas.clientWidth;
   const yRatio = event.offsetY / canvas.clientHeight;
   const left = focusLon - nextWidth * xRatio;
@@ -1915,19 +1988,18 @@ window.chrome?.webview?.addEventListener("message", (event) => {
       for (const cached of fieldCache.values()) {
         if (String(cached?.layer?.id || "").toLowerCase() !== layerId) continue;
         applyPalette(cached.layer);
-        delete cached.texture;
+        releaseFieldTexture(cached);
       }
       if (String(activeField?.layer?.id || "").toLowerCase() === layerId) {
         applyPalette(activeField.layer);
-        delete activeField.texture;
+        releaseFieldTexture(activeField);
       }
       void render();
     }
   } else if (message.type === "set-lead") {
     activeLead = Number(message.lead) || 0;
   } else if (message.type === "reset-view") {
-    Object.assign(view, worldView);
-    resizeViewForViewport(canvas.clientWidth, canvas.clientHeight, true);
+    resetToWorldView();
     void render();
   } else if (message.type === "set-theme") {
     mapTheme = message.theme === "dark" ? "dark" : "light";

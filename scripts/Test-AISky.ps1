@@ -49,6 +49,12 @@ try {
 
     $node = Get-Command node -ErrorAction SilentlyContinue
     if ($null -ne $node) {
+        Write-Host "Running map-math.test.js"
+        & $node.Source (Join-Path $repoRoot "tests\map-math.test.js")
+        if ($LASTEXITCODE -ne 0) {
+            throw "map-math.test.js failed."
+        }
+
         Write-Host "Running typhoon-algorithm.test.js"
         & $node.Source (Join-Path $repoRoot "tests\typhoon-algorithm.test.js")
         if ($LASTEXITCODE -ne 0) {
