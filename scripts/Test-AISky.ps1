@@ -65,6 +65,12 @@ try {
         throw "palette-catalog.test.ps1 failed."
     }
 
+    Write-Host "Running layer-display-catalog.test.ps1"
+    & (Join-Path $repoRoot "tests\layer-display-catalog.test.ps1")
+    if ($LASTEXITCODE -ne 0) {
+        throw "layer-display-catalog.test.ps1 failed."
+    }
+
     if ($Quick) {
         Write-Host "AISky quick data-pipeline test passed." -ForegroundColor Green
     }

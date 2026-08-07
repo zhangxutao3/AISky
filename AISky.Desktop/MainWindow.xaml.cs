@@ -104,10 +104,16 @@ public sealed partial class MainWindow : Window
 
     public void ShowFromTray()
     {
+        var page = RootFrame.Content as MainPage;
+        var showReveal = page?.PrepareTrayReveal() == true;
         _hiddenToTray = false;
         AppWindow.IsShownInSwitchers = true;
         AppWindow.Show();
         Activate();
+        if (showReveal)
+        {
+            page!.PlayTrayReveal();
+        }
         TryShowPendingUpdate();
     }
 

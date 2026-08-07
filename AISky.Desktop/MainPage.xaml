@@ -28,16 +28,16 @@
             <Setter Property="BorderThickness" Value="2" />
         </Style>
         <Style x:Key="CompactTopAppBarButtonStyle" TargetType="AppBarButton">
-            <Setter Property="Width" Value="40" />
-            <Setter Property="MinWidth" Value="40" />
-            <Setter Property="Height" Value="48" />
+            <Setter Property="Width" Value="38" />
+            <Setter Property="MinWidth" Value="38" />
+            <Setter Property="Height" Value="44" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
         <Style x:Key="CompactTopAppBarToggleButtonStyle" TargetType="AppBarToggleButton">
-            <Setter Property="Width" Value="40" />
-            <Setter Property="MinWidth" Value="40" />
-            <Setter Property="Height" Value="48" />
+            <Setter Property="Width" Value="38" />
+            <Setter Property="MinWidth" Value="38" />
+            <Setter Property="Height" Value="44" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
@@ -45,8 +45,8 @@
             x:Key="TopRunPickerComboBoxStyle"
             BasedOn="{StaticResource AISkyCompactComboBoxStyle}"
             TargetType="ComboBox">
-            <Setter Property="Height" Value="32" />
-            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="MinHeight" Value="30" />
             <Setter Property="HorizontalAlignment" Value="Stretch" />
         </Style>
     </Page.Resources>
@@ -65,11 +65,11 @@
                         <Setter Target="BrandLockup.Visibility" Value="Collapsed" />
                         <Setter Target="UpdateStatus.Visibility" Value="Collapsed" />
                         <Setter Target="RightRail.Width" Value="168" />
-                        <Setter Target="RightRail.Margin" Value="0,82,8,112" />
-                        <Setter Target="LayerPanel.Padding" Value="8" />
+                        <Setter Target="RightRail.Margin" Value="0,76,8,112" />
+                        <Setter Target="LayerPanel.Padding" Value="7" />
                         <Setter Target="LayerCategoryPicker.Visibility" Value="Collapsed" />
                         <Setter Target="LayerHint.Visibility" Value="Collapsed" />
-                        <Setter Target="TopChrome.Margin" Value="8,20,8,0" />
+                        <Setter Target="TopChrome.Margin" Value="8,14,8,0" />
                         <Setter Target="TimelinePanel.Margin" Value="8,0,8,8" />
                         <Setter Target="TimelineCaption.Visibility" Value="Collapsed" />
                         <Setter Target="FirstRunCard.Width" Value="350" />
@@ -90,11 +90,11 @@
                         <Setter Target="BrandLockup.Visibility" Value="Collapsed" />
                         <Setter Target="UpdateStatus.Visibility" Value="Collapsed" />
                         <Setter Target="RightRail.Width" Value="228" />
-                        <Setter Target="RightRail.Margin" Value="0,84,12,118" />
-                        <Setter Target="LayerPanel.Padding" Value="10" />
+                        <Setter Target="RightRail.Margin" Value="0,76,12,118" />
+                        <Setter Target="LayerPanel.Padding" Value="9" />
                         <Setter Target="LayerCategoryPicker.Visibility" Value="Visible" />
                         <Setter Target="LayerHint.Visibility" Value="Visible" />
-                        <Setter Target="TopChrome.Margin" Value="12,20,12,0" />
+                        <Setter Target="TopChrome.Margin" Value="12,14,12,0" />
                         <Setter Target="TimelinePanel.Margin" Value="12,0,12,12" />
                         <Setter Target="TimelineCaption.Visibility" Value="Visible" />
                         <Setter Target="FirstRunCard.Width" Value="860" />
@@ -115,11 +115,11 @@
                         <Setter Target="BrandLockup.Visibility" Value="Visible" />
                         <Setter Target="UpdateStatus.Visibility" Value="Visible" />
                         <Setter Target="RightRail.Width" Value="252" />
-                        <Setter Target="RightRail.Margin" Value="0,86,18,124" />
-                        <Setter Target="LayerPanel.Padding" Value="12" />
+                        <Setter Target="RightRail.Margin" Value="0,76,18,124" />
+                        <Setter Target="LayerPanel.Padding" Value="10" />
                         <Setter Target="LayerCategoryPicker.Visibility" Value="Visible" />
                         <Setter Target="LayerHint.Visibility" Value="Visible" />
-                        <Setter Target="TopChrome.Margin" Value="18,20,18,0" />
+                        <Setter Target="TopChrome.Margin" Value="18,14,18,0" />
                         <Setter Target="TimelinePanel.Margin" Value="18,0,18,16" />
                         <Setter Target="TimelineCaption.Visibility" Value="Visible" />
                         <Setter Target="FirstRunCard.Width" Value="1080" />
@@ -170,12 +170,12 @@
 
         <Grid
             x:Name="TopChrome"
-            Margin="18,20,18,0"
+            Margin="18,14,18,0"
             VerticalAlignment="Top">
 
             <Border
                 x:Name="CommandSurface"
-                Height="58"
+                Height="54"
                 HorizontalAlignment="Left"
                 VerticalAlignment="Top"
                 Style="{StaticResource AISkyFloatingPanelStyle}">
@@ -186,13 +186,13 @@
                     </Grid.ColumnDefinitions>
                     <StackPanel
                         x:Name="BrandLockup"
-                        Margin="10,5,3,5"
+                        Margin="9,4,2,4"
                         VerticalAlignment="Center"
                         Orientation="Horizontal"
                         Spacing="6">
                         <Image
-                            Width="32"
-                            Height="32"
+                            Width="30"
+                            Height="30"
                             Source="ms-appx:///Assets/Square44x44Logo.scale-200.png"
                             Stretch="Uniform" />
                         <StackPanel VerticalAlignment="Center" Spacing="-2">
@@ -208,7 +208,7 @@
                     </StackPanel>
                     <CommandBar
                         Grid.Column="1"
-                        Height="48"
+                        Height="44"
                         Margin="0"
                         Padding="0"
                         VerticalAlignment="Center"
@@ -311,7 +311,7 @@
 
             <Button
                 x:Name="CompactRunButton"
-                Height="58"
+                Height="54"
                 Padding="18,0"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Top"
@@ -324,8 +324,8 @@
             <Border
                 x:Name="RunPickerBorder"
                 Width="650"
-                Height="58"
-                Padding="10,4"
+                Height="54"
+                Padding="10,3"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Top"
                 Style="{StaticResource AISkyFloatingPanelStyle}">
@@ -401,14 +401,126 @@
                 </Grid>
             </Border>
 
-            <Border
+            <Button
                 x:Name="UpdateStatus"
                 Width="{Binding ActualWidth, ElementName=RightRail}"
-                Height="58"
+                Height="54"
                 Padding="12,6"
                 HorizontalAlignment="Right"
+                HorizontalContentAlignment="Stretch"
                 VerticalAlignment="Top"
-                Style="{StaticResource AISkyFloatingPanelStyle}">
+                AutomationProperties.Name="查看数据同步详情"
+                Background="{ThemeResource AISkyChromeBrush}"
+                BorderBrush="{ThemeResource AISkyChromeBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="14"
+                ToolTipService.ToolTip="点击查看每个模型的同步状态">
+                <Button.Flyout>
+                    <Flyout
+                        x:Name="SyncStatusFlyout"
+                        Opening="SyncStatusFlyout_Opening"
+                        Placement="BottomEdgeAlignedRight">
+                        <Grid Width="340" RowSpacing="10">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="1">
+                                    <TextBlock
+                                        Style="{StaticResource SubtitleTextBlockStyle}"
+                                        Text="数据同步" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource AISkyTextMutedBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        Text="Energy 与 SDS 独立状态" />
+                                </StackPanel>
+                                <Button
+                                    Grid.Column="1"
+                                    Padding="10,5"
+                                    AutomationProperties.Name="立即同步所有模型"
+                                    Click="SyncNowButton_Click"
+                                    Content="立即同步" />
+                            </Grid>
+                            <ItemsControl
+                                Grid.Row="1"
+                                ItemsSource="{x:Bind SyncModelItems}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid
+                                            MinHeight="58"
+                                            Padding="4,6"
+                                            ColumnSpacing="10">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <Ellipse
+                                                Width="8"
+                                                Height="8"
+                                                VerticalAlignment="Top"
+                                                Margin="0,6,0,0"
+                                                Fill="{Binding StatusBrush}" />
+                                            <Grid Grid.Column="1" RowSpacing="4">
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                </Grid.RowDefinitions>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock
+                                                        FontWeight="SemiBold"
+                                                        Text="{Binding ModelName}" />
+                                                    <TextBlock
+                                                        Grid.Column="1"
+                                                        Foreground="{ThemeResource AISkyTextMutedBrush}"
+                                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                                        Text="{Binding StateText}" />
+                                                </Grid>
+                                                <ProgressBar
+                                                    Grid.Row="1"
+                                                    Height="3"
+                                                    IsIndeterminate="{Binding IsIndeterminate}"
+                                                    Maximum="100"
+                                                    Minimum="0"
+                                                    Value="{Binding Progress}" />
+                                                <TextBlock
+                                                    Grid.Row="2"
+                                                    Foreground="{ThemeResource AISkyTextMutedBrush}"
+                                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                                    Text="{Binding DetailText}"
+                                                    TextTrimming="CharacterEllipsis" />
+                                            </Grid>
+                                            <TextBlock
+                                                Grid.Column="2"
+                                                VerticalAlignment="Center"
+                                                FontSize="11"
+                                                FontWeight="SemiBold"
+                                                Text="{Binding SpeedText}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock
+                                x:Name="SyncFlyoutSummaryText"
+                                Grid.Row="2"
+                                Foreground="{ThemeResource AISkyTextMutedBrush}"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="点击面板外任意位置即可收起"
+                                TextWrapping="Wrap" />
+                        </Grid>
+                    </Flyout>
+                </Button.Flyout>
                 <Grid ColumnSpacing="10">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
@@ -483,13 +595,13 @@
                             Visibility="Collapsed" />
                     </Grid>
                 </Grid>
-            </Border>
+            </Button>
         </Grid>
 
         <Grid
             x:Name="RightRail"
             Width="252"
-            Margin="0,86,18,124"
+            Margin="0,76,18,124"
             HorizontalAlignment="Right"
             VerticalAlignment="Stretch"
             RowSpacing="10">
@@ -503,7 +615,7 @@
             Padding="12"
             VerticalAlignment="Stretch"
             Style="{StaticResource AISkyElevatedPanelStyle}">
-            <Grid RowSpacing="10">
+            <Grid RowSpacing="8">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
@@ -550,7 +662,7 @@
                     </Grid.ColumnDefinitions>
                     <AutoSuggestBox
                         x:Name="LayerSearchBox"
-                        Height="34"
+                        Height="32"
                         MinWidth="0"
                         AutomationProperties.Name="搜索预报变量"
                         PlaceholderText="搜索变量"
@@ -559,7 +671,7 @@
                     <ComboBox
                         x:Name="LayerCategoryPicker"
                         Grid.Column="1"
-                        Height="34"
+                        Height="32"
                         MinWidth="0"
                         AutomationProperties.Name="变量分类"
                         SelectedIndex="0"
@@ -586,19 +698,19 @@
                     </ListView.ItemContainerStyle>
                     <ListView.ItemTemplate>
                         <DataTemplate>
-                            <Grid MinHeight="54" Padding="6,5" ColumnSpacing="10">
+                            <Grid MinHeight="48" Padding="5,3" ColumnSpacing="9">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <Border
-                                    Width="40"
-                                    Height="40"
+                                    Width="34"
+                                    Height="34"
                                     VerticalAlignment="Center"
                                     Background="{ThemeResource AISkyCountBrush}"
                                     BorderBrush="#52FFFFFF"
                                     BorderThickness="1"
-                                    CornerRadius="12">
+                                    CornerRadius="10">
                                     <Image
                                         Source="{Binding Thumbnail}"
                                         Stretch="UniformToFill" />
@@ -660,7 +772,7 @@
             <Button
                 x:Name="ColorBarButton"
                 MinHeight="0"
-                Padding="14,11"
+                Padding="12,9"
                 HorizontalAlignment="Stretch"
                 HorizontalContentAlignment="Stretch"
                 AutomationProperties.Name="选择当前变量的色带"
@@ -1253,14 +1365,8 @@
         <Grid
             x:Name="StartupCover"
             AutomationProperties.Name="AISky 正在启动"
+            Background="{ThemeResource AISkyStartupCoverBrush}"
             IsHitTestVisible="True">
-            <Grid.Background>
-                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                    <GradientStop Offset="0" Color="#FF061A29" />
-                    <GradientStop Offset="0.48" Color="#FF0A3443" />
-                    <GradientStop Offset="1" Color="#FF0B5D66" />
-                </LinearGradientBrush>
-            </Grid.Background>
             <Ellipse
                 Width="760"
                 Height="760"
@@ -1268,7 +1374,7 @@
                 HorizontalAlignment="Left"
                 VerticalAlignment="Bottom"
                 IsHitTestVisible="False"
-                Stroke="#2857D7D0"
+                Stroke="{ThemeResource AISkyStartupHaloBrush}"
                 StrokeThickness="2" />
             <Ellipse
                 Width="560"
@@ -1277,18 +1383,23 @@
                 HorizontalAlignment="Right"
                 VerticalAlignment="Top"
                 IsHitTestVisible="False"
-                Stroke="#3277E5D6"
+                Stroke="{ThemeResource AISkyStartupHaloBrush}"
                 StrokeThickness="2" />
             <StackPanel
+                x:Name="StartupContent"
                 Width="320"
                 HorizontalAlignment="Center"
+                RenderTransformOrigin="0.5,0.5"
                 VerticalAlignment="Center"
                 Spacing="20">
+                <StackPanel.RenderTransform>
+                    <CompositeTransform x:Name="StartupContentTransform" />
+                </StackPanel.RenderTransform>
                 <Border
                     Width="104"
                     Height="104"
                     HorizontalAlignment="Center"
-                    Background="White"
+                    Background="{ThemeResource AISkyStartupLogoSurfaceBrush}"
                     CornerRadius="28">
                     <Image
                         Margin="4"
@@ -1299,13 +1410,13 @@
                 <StackPanel HorizontalAlignment="Center" Spacing="4">
                     <TextBlock
                         HorizontalAlignment="Center"
-                        Foreground="White"
+                        Foreground="{ThemeResource AISkyStartupTitleBrush}"
                         FontSize="42"
                         FontWeight="SemiBold"
                         Text="AISky" />
                     <TextBlock
                         HorizontalAlignment="Center"
-                        Foreground="{StaticResource AISkyDarkMutedTextBrush}"
+                        Foreground="{ThemeResource AISkyStartupSubtitleBrush}"
                         FontSize="16"
                         Text="智慧气象桌面平台" />
                 </StackPanel>
@@ -1318,7 +1429,7 @@
                     <TextBlock
                         x:Name="StartupStatusText"
                         HorizontalAlignment="Center"
-                        Foreground="{StaticResource AISkyDarkMutedTextBrush}"
+                        Foreground="{ThemeResource AISkyStartupSubtitleBrush}"
                         Style="{StaticResource CaptionTextBlockStyle}"
                         Text="正在准备本地预报环境" />
                 </StackPanel>

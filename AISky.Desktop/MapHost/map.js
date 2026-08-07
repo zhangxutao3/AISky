@@ -77,6 +77,8 @@ let windLastFrame = 0;
 let prefetchGeneration = 0;
 let lastViewportWidth = 0;
 let lastViewportHeight = 0;
+let interactionActive = false;
+let interactionEndTimer = 0;
 let typhoonModels = [];
 let typhoonTracks = [];
 let typhoonHitPoints = [];
@@ -250,7 +252,11 @@ function sampleValues(field, values, lon, lat) {
 }
 
 function sampleField(field, lon, lat) {
-  return sampleValues(field, field.values, lon, lat);
+  const value = sampleValues(field, field.values, lon, lat);
+  if (value === null) return null;
+  const scale = Number(field.layer?.displayScale ?? 1);
+  const offset = Number(field.layer?.displayOffset ?? 0);
+  return value * scale + offset;
 }
 
 function sampleVector(field, lon, lat) {
@@ -716,6 +722,10 @@ async function showPointDetails(lon, lat) {
     try {
       const sample = await loadSample(seriesLayer);
       value = sample ? sampleGrid(sample, seriesRun.grid, lon, lat) : null;
+      if (Number.isFinite(value)) {
+        value = value * Number(seriesLayer.displayScale ?? 1)
+          + Number(seriesLayer.displayOffset ?? 0);
+      }
     } catch {
       value = null;
     }
@@ -751,7 +761,7 @@ function prepareFieldTexture(field) {
   const rasterContext = raster.getContext("2d", { alpha: true });
   const image = rasterContext.createImageData(raster.width, raster.height);
   const palette = field.layer.palette;
-  const [low, high] = field.info.range;
+  const [low, high] = field.layer.range ?? field.info.range;
   const span = Math.max(1e-6, high - low);
   const sparseLayer = [
     "prectot",
@@ -827,15 +837,21 @@ function drawRealField(width, height, field) {
     const sourceWidth = ((visibleRight - visibleLeft) / 360) * raster.width;
     const destinationX = ((visibleLeft - view.left) / longitudeSpan) * width;
     const destinationWidth = ((visibleRight - visibleLeft) / longitudeSpan) * width;
+    const overlap = Math.min(1.5 * window.devicePixelRatio, destinationWidth * 0.01);
+    const drawX = Math.max(0, destinationX - (visibleLeft > view.left ? overlap : 0));
+    const drawRight = Math.min(
+      width,
+      destinationX + destinationWidth + (visibleRight < view.right ? overlap : 0),
+    );
     context.drawImage(
       raster,
       sourceX,
       sourceY,
       sourceWidth,
       sourceHeight,
-      destinationX,
+      drawX,
       0,
-      destinationWidth,
+      drawRight - drawX,
       height,
     );
   }
@@ -845,20 +861,40 @@ function drawRealField(width, height, field) {
 function drawGrid(width, height) {
   if (!showGrid) return;
   context.save();
-  context.lineWidth = Math.max(1, window.devicePixelRatio);
-  context.strokeStyle = mapTheme === "dark"
+  // During an active drag AISky intentionally renders the map at a lighter
+  // backing-store scale. Derive label metrics from that real scale so the
+  // coordinates neither jump nor become disproportionately large.
+  const ratio = width / Math.max(1, canvas.clientWidth);
+  const gridStroke = mapTheme === "dark"
     ? "rgba(181, 222, 229, 0.15)"
     : "rgba(29, 73, 84, 0.18)";
-  context.fillStyle = mapTheme === "dark"
-    ? "rgba(218, 238, 241, 0.74)"
-    : "rgba(15, 61, 74, 0.76)";
-  context.font = `${12 * window.devicePixelRatio}px "Segoe UI Variable"`;
+  const labelFill = mapTheme === "dark"
+    ? "rgba(236, 247, 249, 0.92)"
+    : "rgba(6, 38, 48, 0.94)";
+  const labelHalo = mapTheme === "dark"
+    ? "rgba(6, 26, 34, 0.86)"
+    : "rgba(248, 253, 253, 0.86)";
+  context.lineWidth = Math.max(1, ratio);
+  context.strokeStyle = gridStroke;
+  context.fillStyle = labelFill;
+  context.font = `600 ${12 * ratio}px "Segoe UI Variable"`;
 
   const lonSpan = view.right - view.left;
   const latSpan = view.top - view.bottom;
   const lonStep = lonSpan <= 30 ? 5 : lonSpan <= 80 ? 10 : lonSpan <= 180 ? 20 : 30;
   const latStep = latSpan <= 24 ? 5 : latSpan <= 70 ? 10 : 20;
-  const edgeInset = 7 * window.devicePixelRatio;
+  const edgeInset = 8 * ratio;
+  const topChromeInset = 82 * ratio;
+  const bottomChromeInset = 126 * ratio;
+  const drawLabel = (label, x, y) => {
+    context.lineWidth = 3 * ratio;
+    context.strokeStyle = labelHalo;
+    context.strokeText(label, x, y);
+    context.fillStyle = labelFill;
+    context.fillText(label, x, y);
+    context.lineWidth = Math.max(1, ratio);
+    context.strokeStyle = gridStroke;
+  };
   context.textBaseline = "top";
   for (let lon = Math.ceil(view.left / lonStep) * lonStep; lon <= view.right; lon += lonStep) {
     const [x] = project(lon, view.bottom, width, height);
@@ -870,10 +906,10 @@ function drawGrid(width, height) {
     const suffix = displayLon === 0 ? "" : displayLon < 0 ? "W" : "E";
     const label = `${Math.abs(displayLon)}°${suffix}`;
     const labelWidth = context.measureText(label).width;
-    context.fillText(
+    drawLabel(
       label,
       clamp(x - labelWidth / 2, edgeInset, width - labelWidth - edgeInset),
-      edgeInset,
+      topChromeInset,
     );
   }
   context.textBaseline = "middle";
@@ -885,7 +921,9 @@ function drawGrid(width, height) {
     context.stroke();
     const suffix = lat === 0 ? "" : lat < 0 ? "S" : "N";
     const label = `${Math.abs(lat)}°${suffix}`;
-    context.fillText(label, edgeInset, clamp(y, edgeInset, height - edgeInset));
+    if (y >= topChromeInset && y <= height - bottomChromeInset) {
+      drawLabel(label, edgeInset, y);
+    }
   }
   context.restore();
 }
@@ -1512,8 +1550,8 @@ function animateWind(timestamp) {
     const strongWind = Math.max(0, Math.min(1, speed / 32));
     const alpha = 0.30 + strongWind * 0.36;
     windContext.lineWidth = Math.max(
-      1.05,
-      (window.devicePixelRatio || 1) * (1.22 - strongWind * 0.18),
+      1.2,
+      (window.devicePixelRatio || 1) * (1.46 - strongWind * 0.18),
     );
     const projectedTrail = particle.trail.map((coordinate) => [
       ((coordinate[0] - view.left) / lonSpan) * width,
@@ -1566,7 +1604,10 @@ async function refreshWindAnimation(generation) {
 
 async function render() {
   const generation = ++renderGeneration;
-  const ratio = Math.min(window.devicePixelRatio || 1, 2);
+  const ratio = Math.min(
+    window.devicePixelRatio || 1,
+    interactionActive ? 1.25 : 2,
+  );
   const clientWidth = Math.max(1, canvas.clientWidth);
   const clientHeight = Math.max(1, canvas.clientHeight);
   resizeViewForViewport(clientWidth, clientHeight);
@@ -1617,6 +1658,24 @@ function requestRender() {
   });
 }
 
+function beginMapInteraction() {
+  window.clearTimeout(interactionEndTimer);
+  if (interactionActive) return;
+  interactionActive = true;
+  stopWindAnimation();
+}
+
+function finishMapInteraction(delay = 0) {
+  window.clearTimeout(interactionEndTimer);
+  interactionEndTimer = window.setTimeout(() => {
+    interactionActive = false;
+    requestRender();
+    if (showWindAnimation && windField && !windFrame) {
+      windFrame = requestAnimationFrame(animateWind);
+    }
+  }, delay);
+}
+
 async function loadAssets() {
   const [
     coastResponse,
@@ -1642,6 +1701,7 @@ async function loadAssets() {
 }
 
 canvas.addEventListener("pointerdown", (event) => {
+  beginMapInteraction();
   canvas.focus({ preventScroll: true });
   canvas.setPointerCapture(event.pointerId);
   dragState = {
@@ -1656,10 +1716,12 @@ canvas.addEventListener("pointerup", (event) => {
   suppressMapClick = Boolean(dragState?.moved);
   if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
   dragState = null;
+  finishMapInteraction();
 });
 
 canvas.addEventListener("pointercancel", () => {
   dragState = null;
+  finishMapInteraction();
   typhoonHover.hidden = true;
   typhoonPreview.hidden = true;
 });
@@ -1788,6 +1850,7 @@ document.addEventListener("keydown", (event) => {
 
 canvas.addEventListener("wheel", (event) => {
   event.preventDefault();
+  beginMapInteraction();
   const [focusLon, focusLat] = unproject(event.offsetX, event.offsetY);
   const factor = event.deltaY < 0 ? 0.82 : 1.22;
   const nextWidth = clamp((view.right - view.left) * factor, 12, 360);
@@ -1803,6 +1866,7 @@ canvas.addEventListener("wheel", (event) => {
     bottom: top - nextHeight,
   });
   requestRender();
+  finishMapInteraction(110);
 }, { passive: false });
 
 window.chrome?.webview?.addEventListener("message", (event) => {

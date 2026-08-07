@@ -8,7 +8,7 @@
   --typhoon-stroke: rgba(109, 154, 163, 0.34);
   --point-surface: rgba(248, 253, 253, 0.92);
   --point-text: #17313a;
-  --point-muted: #496a73;
+  --point-muted: #2f5059;
   --point-stroke: rgba(109, 154, 163, 0.36);
   --point-reading: linear-gradient(135deg, #eefbfa, #f4f9ff);
   --point-reading-text: #102c37;
@@ -339,6 +339,7 @@ body {
   border-radius: 11px;
   color: var(--point-muted);
   font-size: 12px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.01em;
 }

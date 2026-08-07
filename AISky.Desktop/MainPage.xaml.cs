@@ -53,6 +53,7 @@ public sealed partial class MainPage : Page
 
     public ObservableCollection<LayerItem> LayerItems { get; } = [];
     public ObservableCollection<ColorPaletteOption> PaletteOptions { get; } = [];
+    public ObservableCollection<SyncModelStatusItem> SyncModelItems { get; } = [];
     public bool CanShowUpdatePrompt =>
         StartupCover.Visibility == Visibility.Collapsed
         && FirstRunOverlay.Visibility == Visibility.Collapsed
@@ -956,6 +957,70 @@ public sealed partial class MainPage : Page
             : Visibility.Collapsed;
         CancelBackgroundTaskButton.IsEnabled = status.CanCancel;
         CancelBackgroundTaskCommand.IsEnabled = status.CanCancel;
+        UpdateSyncModelItems(status);
+    }
+
+    private void SyncStatusFlyout_Opening(object? sender, object e) =>
+        UpdateSyncModelItems(
+            _lastBackgroundStatus ?? App.Services.BackgroundSync.CurrentStatus);
+
+    private void UpdateSyncModelItems(BackgroundSyncStatus status)
+    {
+        SyncModelItems.Clear();
+        var statuses = status.ModelStatuses is { Count: > 0 }
+            ? status.ModelStatuses
+            : new[]
+            {
+                new ModelSyncProgress(
+                    "AISky-Energy",
+                    ModelSyncState.Queued,
+                    "等待下一次同步"),
+                new ModelSyncProgress(
+                    "AISky-SDS",
+                    ModelSyncState.Queued,
+                    "等待下一次同步"),
+            };
+        foreach (var item in statuses)
+        {
+            var stateText = item.State switch
+            {
+                ModelSyncState.Queued => "等待",
+                ModelSyncState.Checking => "正在检查",
+                ModelSyncState.Downloading => "正在下载",
+                ModelSyncState.Complete => "已完成",
+                ModelSyncState.Skipped => "已缓存",
+                ModelSyncState.NoData => "暂无数据",
+                ModelSyncState.Error => "失败",
+                _ => "状态",
+            };
+            var resourceKey = item.State switch
+            {
+                ModelSyncState.Downloading or ModelSyncState.Checking => "AISkyWarningBrush",
+                ModelSyncState.Error => "AISkyErrorBrush",
+                ModelSyncState.Complete or ModelSyncState.Skipped => "AISkySuccessBrush",
+                _ => "AISkyChromeBorderBrush",
+            };
+            var brush = Application.Current.Resources[resourceKey] as Brush
+                ?? new SolidColorBrush(Windows.UI.Color.FromArgb(255, 100, 128, 137));
+            var progress = Math.Clamp(item.ProgressPercent ?? 0, 0, 100);
+            var detail = item.CurrentItem is { } current && item.TotalItems is { } total
+                ? $"{item.Message} · {current}/{total}"
+                : item.Message;
+            var speed = item.BytesPerSecond > 1024
+                ? $"{BackgroundSyncService.FormatBytes((long)item.BytesPerSecond)}/s"
+                : "";
+            SyncModelItems.Add(new SyncModelStatusItem(
+                item.Model.Replace("AISky-", "", StringComparison.Ordinal),
+                stateText,
+                detail,
+                speed,
+                progress,
+                item.ProgressPercent is null
+                    && item.State is ModelSyncState.Checking or ModelSyncState.Downloading,
+                brush));
+        }
+
+        SyncFlyoutSummaryText.Text = FormatBackgroundStatusMessage(status);
     }
 
     private void ModelStatusTicker_Tick(object? sender, object e)
@@ -1352,6 +1417,7 @@ public sealed partial class MainPage : Page
                 || layer.Code.Contains(search, StringComparison.OrdinalIgnoreCase)
                 || layer.Name.Contains(search, StringComparison.CurrentCultureIgnoreCase)
                 || layer.Category.Contains(search, StringComparison.CurrentCultureIgnoreCase)))
+            .OrderBy(layer => layer.Code, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         LayerItems.Clear();
@@ -1649,7 +1715,8 @@ public sealed partial class MainPage : Page
         {
             var previousLayer = (LayerList.SelectedItem as LayerItem)?.Id;
             _allLayerItems.Clear();
-            foreach (var layer in run.Layers)
+            foreach (var layer in run.Layers
+                         .OrderBy(layer => layer.Label, StringComparer.OrdinalIgnoreCase))
             {
                 _allLayerItems.Add(LayerItem.FromForecastLayer(layer));
             }
@@ -1758,20 +1825,29 @@ public sealed partial class MainPage : Page
                     rows = seriesRun.Grid.Rows,
                     cols = seriesRun.Grid.Columns,
                 },
-                layers = seriesRun.Layers.Select(layer => new
-                {
-                    id = layer.Id,
-                    label = layer.Label,
-                    cn = layer.Name,
-                    unit = layer.Unit,
-                    palette = ResolveLayerPalette(layer.Id, layer.Palette),
-                    paletteOverride = HasLayerPaletteOverride(layer.Id),
-                    sampleUrl = string.IsNullOrWhiteSpace(layer.Sample)
-                        ? null
-                        : BuildDataUrl(layer.Sample),
-                }),
+                layers = seriesRun.Layers.Select(CreateMapSeriesLayer),
             }),
         });
+    }
+
+    private object CreateMapSeriesLayer(ForecastLayer layer)
+    {
+        var display = LayerDisplayCatalog.Resolve(layer);
+        return new
+        {
+            id = layer.Id,
+            label = layer.Label,
+            cn = layer.Name,
+            unit = display.Unit,
+            range = new[] { display.Minimum, display.Maximum },
+            displayScale = display.Scale,
+            displayOffset = display.Offset,
+            palette = ResolveLayerPalette(layer.Id, layer.Palette),
+            paletteOverride = HasLayerPaletteOverride(layer.Id),
+            sampleUrl = string.IsNullOrWhiteSpace(layer.Sample)
+                ? null
+                : BuildDataUrl(layer.Sample),
+        };
     }
 
     private object[] CreateTyphoonModelSeries()
@@ -1860,13 +1936,18 @@ public sealed partial class MainPage : Page
                 rows = run.Grid.Rows,
                 cols = run.Grid.Columns,
             },
-            layers = run.Layers.Select(layer => new
+            layers = run.Layers.Select(layer =>
             {
+                var display = LayerDisplayCatalog.Resolve(layer);
+                return new
+                {
                 id = layer.Id,
                 label = layer.Label,
                 cn = layer.Name,
-                unit = layer.Unit,
-                range = layer.Range,
+                unit = display.Unit,
+                range = new[] { display.Minimum, display.Maximum },
+                displayScale = display.Scale,
+                displayOffset = display.Offset,
                 palette = ResolveLayerPalette(layer.Id, layer.Palette),
                 paletteOverride = HasLayerPaletteOverride(layer.Id),
                 fieldUrl = BuildDataUrl(layer.Field),
@@ -1894,6 +1975,7 @@ public sealed partial class MainPage : Page
                             range = layer.Vector.FieldInfo.Range,
                         },
                     },
+                };
             }),
         };
 
@@ -2117,8 +2199,81 @@ public sealed partial class MainPage : Page
         {
             return;
         }
-        StartupCover.Visibility = Visibility.Collapsed;
+        AnimateStartupCoverAway();
         ((Application.Current as App)?.MainWindow as MainWindow)?.TryShowPendingUpdate();
+    }
+
+    public bool PrepareTrayReveal()
+    {
+        if (!_mapReady
+            || StartupCover.Visibility == Visibility.Visible
+            || FirstRunOverlay.Visibility == Visibility.Visible)
+        {
+            return false;
+        }
+
+        StartupProgressBar.Visibility = Visibility.Collapsed;
+        StartupStatusText.Text = "正在恢复预报工作区";
+        StartupCover.Opacity = 1;
+        StartupContent.Opacity = 1;
+        StartupContentTransform.ScaleX = 0.97;
+        StartupContentTransform.ScaleY = 0.97;
+        StartupCover.Visibility = Visibility.Visible;
+        return true;
+    }
+
+    public void PlayTrayReveal() => AnimateStartupCoverAway(80);
+
+    private void AnimateStartupCoverAway(int beginDelayMilliseconds = 100)
+    {
+        if (StartupCover.Visibility != Visibility.Visible)
+        {
+            return;
+        }
+
+        var storyboard = new Storyboard();
+        var easing = new ExponentialEase
+        {
+            Exponent = 6,
+            EasingMode = EasingMode.EaseOut,
+        };
+        var coverFade = new DoubleAnimation
+        {
+            From = 1,
+            To = 0,
+            BeginTime = TimeSpan.FromMilliseconds(beginDelayMilliseconds),
+            Duration = TimeSpan.FromMilliseconds(240),
+            EasingFunction = easing,
+        };
+        Storyboard.SetTarget(coverFade, StartupCover);
+        Storyboard.SetTargetProperty(coverFade, "Opacity");
+        storyboard.Children.Add(coverFade);
+
+        foreach (var property in new[] { "ScaleX", "ScaleY" })
+        {
+            var scale = new DoubleAnimation
+            {
+                From = 0.97,
+                To = 1.015,
+                Duration = TimeSpan.FromMilliseconds(280),
+                EasingFunction = easing,
+            };
+            Storyboard.SetTarget(scale, StartupContentTransform);
+            Storyboard.SetTargetProperty(scale, property);
+            storyboard.Children.Add(scale);
+        }
+
+        storyboard.Completed += (_, _) =>
+        {
+            StartupCover.Visibility = Visibility.Collapsed;
+            StartupCover.Opacity = 1;
+            StartupContent.Opacity = 1;
+            StartupContentTransform.ScaleX = 1;
+            StartupContentTransform.ScaleY = 1;
+            StartupProgressBar.Visibility = Visibility.Visible;
+            StartupStatusText.Text = "正在准备本地预报环境";
+        };
+        storyboard.Begin();
     }
 }
 
@@ -2139,14 +2294,15 @@ public sealed class LayerItem
         var palette = layer.Palette.Count > 0
             ? layer.Palette
             : ["#0B78B6", "#2DB6C8"];
+        var display = LayerDisplayCatalog.Resolve(layer);
         return new LayerItem
         {
             Id = layer.Id,
             Code = layer.Label,
             Name = layer.Name,
-            Unit = layer.Unit,
+            Unit = display.Unit,
             Category = Categorize(layer.Label),
-            Range = layer.Range,
+            Range = [display.Minimum, display.Maximum],
             Palette = palette,
             Thumbnail = $"ms-appx:///Assets/Layers/{layer.Id}.png",
             Brush = CreatePaletteBrush(palette, diagonal: true),
@@ -2225,4 +2381,22 @@ public sealed class ColorPaletteOption
     public string Name { get; }
     public bool IsAutomatic { get; }
     public Brush PreviewBrush { get; }
+}
+
+public sealed class SyncModelStatusItem(
+    string modelName,
+    string stateText,
+    string detailText,
+    string speedText,
+    double progress,
+    bool isIndeterminate,
+    Brush statusBrush)
+{
+    public string ModelName { get; } = modelName;
+    public string StateText { get; } = stateText;
+    public string DetailText { get; } = detailText;
+    public string SpeedText { get; } = speedText;
+    public double Progress { get; } = progress;
+    public bool IsIndeterminate { get; } = isIndeterminate;
+    public Brush StatusBrush { get; } = statusBrush;
 }

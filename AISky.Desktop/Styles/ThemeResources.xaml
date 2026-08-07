@@ -12,6 +12,15 @@
             <SolidColorBrush x:Key="AISkyLayerSelectedBrush" Color="#2214B5BF" />
             <SolidColorBrush x:Key="AISkyTextMutedBrush" Color="#BA476871" />
             <SolidColorBrush x:Key="AISkyCountBrush" Color="#1717AEB8" />
+            <LinearGradientBrush x:Key="AISkyStartupCoverBrush" StartPoint="0,0" EndPoint="1,1">
+                <GradientStop Offset="0" Color="#FFF7FCFD" />
+                <GradientStop Offset="0.52" Color="#FFDDF1F2" />
+                <GradientStop Offset="1" Color="#FFB9E4E3" />
+            </LinearGradientBrush>
+            <SolidColorBrush x:Key="AISkyStartupTitleBrush" Color="#FF17313A" />
+            <SolidColorBrush x:Key="AISkyStartupSubtitleBrush" Color="#D8476871" />
+            <SolidColorBrush x:Key="AISkyStartupLogoSurfaceBrush" Color="#F8FFFFFF" />
+            <SolidColorBrush x:Key="AISkyStartupHaloBrush" Color="#3D54BFC3" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Dark">
             <SolidColorBrush x:Key="AISkyChromeBrush" Color="#E31A2B34" />
@@ -21,6 +30,15 @@
             <SolidColorBrush x:Key="AISkyLayerSelectedBrush" Color="#3A30A9C4" />
             <SolidColorBrush x:Key="AISkyTextMutedBrush" Color="#C8D8E8EE" />
             <SolidColorBrush x:Key="AISkyCountBrush" Color="#2748BCD1" />
+            <LinearGradientBrush x:Key="AISkyStartupCoverBrush" StartPoint="0,0" EndPoint="1,1">
+                <GradientStop Offset="0" Color="#FF061A29" />
+                <GradientStop Offset="0.48" Color="#FF0A3443" />
+                <GradientStop Offset="1" Color="#FF0B5D66" />
+            </LinearGradientBrush>
+            <SolidColorBrush x:Key="AISkyStartupTitleBrush" Color="#FFFFFFFF" />
+            <SolidColorBrush x:Key="AISkyStartupSubtitleBrush" Color="#C8D7E7EC" />
+            <SolidColorBrush x:Key="AISkyStartupLogoSurfaceBrush" Color="#FFFFFFFF" />
+            <SolidColorBrush x:Key="AISkyStartupHaloBrush" Color="#3277E5D6" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="HighContrast">
             <SolidColorBrush x:Key="AISkyChromeBrush" Color="{ThemeResource SystemColorWindowColor}" />
@@ -30,6 +48,11 @@
             <SolidColorBrush x:Key="AISkyLayerSelectedBrush" Color="{ThemeResource SystemColorHighlightColor}" />
             <SolidColorBrush x:Key="AISkyTextMutedBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <SolidColorBrush x:Key="AISkyCountBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="AISkyStartupCoverBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="AISkyStartupTitleBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="AISkyStartupSubtitleBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="AISkyStartupLogoSurfaceBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="AISkyStartupHaloBrush" Color="{ThemeResource SystemColorHighlightColor}" />
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 
@@ -67,8 +90,8 @@
 
     <Style x:Key="AISkyLayerItemStyle" TargetType="ListViewItem">
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-        <Setter Property="MinHeight" Value="54" />
-        <Setter Property="Margin" Value="0,2" />
+        <Setter Property="MinHeight" Value="48" />
+        <Setter Property="Margin" Value="0,1" />
         <Setter Property="Padding" Value="0" />
         <Setter Property="CornerRadius" Value="10" />
         <Setter Property="UseSystemFocusVisuals" Value="True" />
