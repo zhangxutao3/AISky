@@ -1,4 +1,4 @@
-"""Build lightweight Natural Earth overlays for the local Canvas map."""
+"""Build the remaining lightweight Natural Earth overlays for the local Canvas map."""
 
 from __future__ import annotations
 
@@ -91,13 +91,6 @@ def write_lakes() -> None:
 def main() -> None:
     TARGET.mkdir(parents=True, exist_ok=True)
     write_lines(
-        "countries-110m.json",
-        "110m",
-        "cultural",
-        "admin_0_boundary_lines_land",
-        tolerance=0.06,
-    )
-    write_lines(
         "china-provinces-50m.json",
         "50m",
         "cultural",
@@ -115,7 +108,6 @@ def main() -> None:
     )
     write_lakes()
     for path in (
-        "countries-110m.json",
         "china-provinces-50m.json",
         "rivers-50m.json",
         "lakes-50m.json",

@@ -55,6 +55,12 @@ try {
             throw "map-math.test.js failed."
         }
 
+        Write-Host "Running map-boundary-assets.test.js"
+        & $node.Source (Join-Path $repoRoot "tests\map-boundary-assets.test.js")
+        if ($LASTEXITCODE -ne 0) {
+            throw "map-boundary-assets.test.js failed."
+        }
+
         Write-Host "Running typhoon-algorithm.test.js"
         & $node.Source (Join-Path $repoRoot "tests\typhoon-algorithm.test.js")
         if ($LASTEXITCODE -ne 0) {

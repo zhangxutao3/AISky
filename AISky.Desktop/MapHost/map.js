@@ -45,6 +45,11 @@ const fieldCache = new Map();
 const sampleCache = new Map();
 let coastlines = [];
 let countryBorders = [];
+let chinaLandBorders = [];
+let chinaCoastBorders = [];
+let chinaCoastMajorBorders = [];
+let chinaIslandBorders = [];
+let chinaIslandMajorBorders = [];
 let provinceBorders = [];
 let rivers = [];
 let lakes = [];
@@ -977,28 +982,32 @@ function drawGrid(width, height) {
   context.restore();
 }
 
-function traceWrappedLine(line, width, height, longitudeOffset) {
-  let started = false;
-  context.beginPath();
-  for (const point of line) {
+function appendWrappedLine(line, width, height, longitudeOffset) {
+  for (let index = 0; index < line.length; index += 1) {
+    const point = line[index];
     const [x, y] = project(point[0] + longitudeOffset, point[1], width, height);
-    if (!started) {
+    if (index === 0) {
       context.moveTo(x, y);
-      started = true;
     } else {
       context.lineTo(x, y);
     }
   }
 }
 
+function traceWrappedLine(line, width, height, longitudeOffset) {
+  context.beginPath();
+  appendWrappedLine(line, width, height, longitudeOffset);
+}
+
 function drawWrappedLines(lines, width, height, firstCopy, lastCopy) {
+  context.beginPath();
   for (let copy = firstCopy; copy <= lastCopy; copy += 1) {
     const longitudeOffset = copy * 360;
     for (const line of lines) {
-      traceWrappedLine(line, width, height, longitudeOffset);
-      context.stroke();
+      appendWrappedLine(line, width, height, longitudeOffset);
     }
   }
+  context.stroke();
 }
 
 function drawHydrology(width, height, firstCopy, lastCopy) {
@@ -1058,6 +1067,45 @@ function drawCoastlines(width, height) {
     : "rgba(18, 58, 68, 0.62)";
   context.lineWidth = (longitudeSpan > 240 ? 0.58 : 0.82) * mapRenderRatio;
   drawWrappedLines(countryBorders, width, height, firstCopy, lastCopy);
+
+  if (longitudeSpan <= 200) {
+    context.strokeStyle = mapTheme === "dark"
+      ? activeField
+        ? "rgba(10, 42, 52, 0.88)"
+        : "rgba(111, 184, 195, 0.82)"
+      : "rgba(16, 55, 66, 0.78)";
+    context.lineWidth = 1.05 * mapRenderRatio;
+    drawWrappedLines(
+      longitudeSpan <= 80 ? chinaCoastBorders : chinaCoastMajorBorders,
+      width,
+      height,
+      firstCopy,
+      lastCopy,
+    );
+    if (longitudeSpan <= 150) {
+      context.strokeStyle = mapTheme === "dark"
+        ? activeField
+          ? "rgba(18, 63, 75, 0.66)"
+          : "rgba(105, 176, 188, 0.68)"
+        : "rgba(24, 72, 82, 0.62)";
+      context.lineWidth = 0.72 * mapRenderRatio;
+      drawWrappedLines(
+        longitudeSpan <= 80 ? chinaIslandBorders : chinaIslandMajorBorders,
+        width,
+        height,
+        firstCopy,
+        lastCopy,
+      );
+    }
+  }
+
+  context.strokeStyle = mapTheme === "dark"
+    ? activeField
+      ? "rgba(14, 50, 59, 0.72)"
+      : "rgba(101, 168, 180, 0.64)"
+    : "rgba(18, 58, 68, 0.62)";
+  context.lineWidth = (longitudeSpan > 240 ? 0.58 : 0.82) * mapRenderRatio;
+  drawWrappedLines(chinaLandBorders, width, height, firstCopy, lastCopy);
 
   if (longitudeSpan <= 110 && !interactionActive) {
     context.strokeStyle = mapTheme === "dark"
@@ -1753,13 +1801,15 @@ async function loadAssets() {
   const [
     coastResponse,
     countryResponse,
+    chinaBorderResponse,
     provinceResponse,
     riverResponse,
     lakeResponse,
     placesResponse,
   ] = await Promise.all([
     fetch("./assets/coastlines-110m.json"),
-    fetch("./assets/countries-110m.json"),
+    fetch("./assets/countries-meteoinfo.json"),
+    fetch("./assets/china-border-meteoinfo.json"),
     fetch("./assets/china-provinces-50m.json"),
     fetch("./assets/rivers-50m.json"),
     fetch("./assets/lakes-50m.json"),
@@ -1767,6 +1817,12 @@ async function loadAssets() {
   ]);
   coastlines = (await coastResponse.json()).lines || [];
   countryBorders = (await countryResponse.json()).lines || [];
+  const chinaBorderData = await chinaBorderResponse.json();
+  chinaLandBorders = chinaBorderData.landLines || [];
+  chinaCoastBorders = chinaBorderData.coastLines || [];
+  chinaCoastMajorBorders = chinaBorderData.coastMajorLines || chinaCoastBorders;
+  chinaIslandBorders = chinaBorderData.islandLines || [];
+  chinaIslandMajorBorders = chinaBorderData.islandMajorLines || chinaIslandBorders;
   provinceBorders = (await provinceResponse.json()).lines || [];
   rivers = (await riverResponse.json()).lines || [];
   lakes = (await lakeResponse.json()).polygons || [];
