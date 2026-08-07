@@ -765,7 +765,9 @@ function prepareFieldTexture(field) {
     "dusmass25",
     "duflux",
   ].includes(field.layer.id);
-  const renderPalette = sparseLayer && palette.length > 2 ? palette.slice(1) : palette;
+  const renderPalette = sparseLayer && palette.length > 2 && !field.layer.paletteOverride
+    ? palette.slice(1)
+    : palette;
 
   for (let y = 0; y < raster.height; y += 1) {
     const lat = textureBounds.top
@@ -1833,6 +1835,30 @@ window.chrome?.webview?.addEventListener("message", (event) => {
         void showPointDetails(pointSelection.lon, pointSelection.lat);
       }
     });
+  } else if (message.type === "set-palette") {
+    const layerId = String(message.layer || "").toLowerCase();
+    const palette = Array.isArray(message.palette)
+      ? message.palette.filter((color) => /^#[0-9a-f]{6}$/i.test(color))
+      : [];
+    if (layerId && palette.length > 0) {
+      const applyPalette = (layer) => {
+        if (String(layer?.id || "").toLowerCase() !== layerId) return;
+        layer.palette = [...palette];
+        layer.paletteOverride = message.paletteOverride === true;
+      };
+      activeRun?.layers?.forEach(applyPalette);
+      forecastSeries.forEach((run) => run.layers?.forEach(applyPalette));
+      for (const cached of fieldCache.values()) {
+        if (String(cached?.layer?.id || "").toLowerCase() !== layerId) continue;
+        applyPalette(cached.layer);
+        delete cached.texture;
+      }
+      if (String(activeField?.layer?.id || "").toLowerCase() === layerId) {
+        applyPalette(activeField.layer);
+        delete activeField.texture;
+      }
+      void render();
+    }
   } else if (message.type === "set-lead") {
     activeLead = Number(message.lead) || 0;
   } else if (message.type === "reset-view") {

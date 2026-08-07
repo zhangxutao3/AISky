@@ -627,7 +627,7 @@
                     Margin="4,0,4,2"
                     Foreground="{ThemeResource AISkyTextMutedBrush}"
                     Style="{StaticResource CaptionTextBlockStyle}"
-                    Text="颜色和值域随产品自动更新"
+                    Text="点击右下角色带可为当前变量固定配色"
                     TextWrapping="Wrap" />
                 <StackPanel
                     Grid.Row="4"
@@ -655,55 +655,167 @@
         <Border
             x:Name="ColorBarPanel"
             Grid.Row="1"
-            Padding="14,11"
+            Padding="0"
             Style="{StaticResource AISkyFloatingPanelStyle}">
-            <StackPanel Spacing="7">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <TextBlock
-                        x:Name="ColorLayerText"
-                        Style="{StaticResource BodyStrongTextBlockStyle}"
-                        Text="等待数据" />
-                    <TextBlock
-                        x:Name="ColorUnitText"
-                        Grid.Column="1"
-                        Foreground="{ThemeResource AISkyTextMutedBrush}"
-                        Style="{StaticResource CaptionTextBlockStyle}"
-                        Text="" />
-                </Grid>
-                <Rectangle Height="8" RadiusX="4" RadiusY="4">
-                    <Rectangle.Fill>
-                        <LinearGradientBrush x:Name="ColorBarGradient" StartPoint="0,0.5" EndPoint="1,0.5">
-                            <GradientStop Offset="0" Color="#2449A5" />
-                            <GradientStop Offset="0.28" Color="#27B8D0" />
-                            <GradientStop Offset="0.52" Color="#F1E8C4" />
-                            <GradientStop Offset="0.72" Color="#E9A62F" />
-                            <GradientStop Offset="1" Color="#9F1D5A" />
-                        </LinearGradientBrush>
-                    </Rectangle.Fill>
-                </Rectangle>
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <TextBlock
-                        x:Name="ColorMinimumText"
-                        Foreground="{ThemeResource AISkyTextMutedBrush}"
-                        Style="{StaticResource CaptionTextBlockStyle}"
-                        Text="--" />
-                    <TextBlock
-                        x:Name="ColorMaximumText"
-                        Grid.Column="1"
-                        HorizontalAlignment="Right"
-                        Foreground="{ThemeResource AISkyTextMutedBrush}"
-                        Style="{StaticResource CaptionTextBlockStyle}"
-                        Text="--" />
-                </Grid>
-            </StackPanel>
+            <Button
+                x:Name="ColorBarButton"
+                MinHeight="0"
+                Padding="14,11"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Stretch"
+                AutomationProperties.Name="选择当前变量的色带"
+                Background="Transparent"
+                BorderThickness="0"
+                CornerRadius="14"
+                ToolTipService.ToolTip="点击为当前变量选择色带">
+                <Button.Flyout>
+                    <Flyout
+                        x:Name="ColorPaletteFlyout"
+                        Opening="ColorPaletteFlyout_Opening"
+                        Placement="TopEdgeAlignedRight">
+                        <Grid Width="330" RowSpacing="10">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock
+                                x:Name="PaletteFlyoutTitle"
+                                Style="{StaticResource SubtitleTextBlockStyle}"
+                                Text="当前变量色带" />
+                            <TextBlock
+                                x:Name="PaletteFlyoutHint"
+                                Grid.Row="1"
+                                Foreground="{ThemeResource AISkyTextMutedBrush}"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="选择只应用于当前变量，并自动保存"
+                                TextWrapping="Wrap" />
+                            <AutoSuggestBox
+                                x:Name="PaletteSearchBox"
+                                Grid.Row="2"
+                                AutomationProperties.Name="搜索可选色带"
+                                PlaceholderText="搜索色带名称"
+                                QueryIcon="Find"
+                                TextChanged="PaletteSearchBox_TextChanged" />
+                            <ListView
+                                x:Name="PaletteList"
+                                Grid.Row="3"
+                                MaxHeight="350"
+                                AutomationProperties.Name="可选色带"
+                                IsItemClickEnabled="False"
+                                ItemsSource="{x:Bind PaletteOptions}"
+                                SelectionChanged="PaletteList_SelectionChanged"
+                                SelectionMode="Single">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid
+                                            MinHeight="42"
+                                            Padding="4,3"
+                                            ColumnSpacing="12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="140" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <Rectangle
+                                                Height="14"
+                                                VerticalAlignment="Center"
+                                                Fill="{Binding PreviewBrush}"
+                                                RadiusX="7"
+                                                RadiusY="7" />
+                                            <TextBlock
+                                                Grid.Column="1"
+                                                VerticalAlignment="Center"
+                                                Style="{StaticResource BodyTextBlockStyle}"
+                                                Text="{Binding Name}"
+                                                TextTrimming="CharacterEllipsis" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                            <ToggleSwitch
+                                x:Name="ReversePaletteToggle"
+                                Grid.Row="4"
+                                AutomationProperties.Name="反转当前变量色带"
+                                Header="反转色带"
+                                OffContent="正常"
+                                OnContent="已反转"
+                                Toggled="ReversePaletteToggle_Toggled" />
+                            <TextBlock
+                                Grid.Row="5"
+                                Foreground="{ThemeResource AISkyTextMutedBrush}"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="选择“跟随变量默认”可恢复产品原始配色"
+                                TextWrapping="Wrap" />
+                        </Grid>
+                    </Flyout>
+                </Button.Flyout>
+                <StackPanel Spacing="7">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            x:Name="ColorLayerText"
+                            Style="{StaticResource BodyStrongTextBlockStyle}"
+                            Text="等待数据" />
+                        <TextBlock
+                            x:Name="ColorUnitText"
+                            Grid.Column="1"
+                            Foreground="{ThemeResource AISkyTextMutedBrush}"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Text="" />
+                    </Grid>
+                    <Rectangle Height="8" RadiusX="4" RadiusY="4">
+                        <Rectangle.Fill>
+                            <LinearGradientBrush x:Name="ColorBarGradient" StartPoint="0,0.5" EndPoint="1,0.5">
+                                <GradientStop Offset="0" Color="#2449A5" />
+                                <GradientStop Offset="0.28" Color="#27B8D0" />
+                                <GradientStop Offset="0.52" Color="#F1E8C4" />
+                                <GradientStop Offset="0.72" Color="#E9A62F" />
+                                <GradientStop Offset="1" Color="#9F1D5A" />
+                            </LinearGradientBrush>
+                        </Rectangle.Fill>
+                    </Rectangle>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            x:Name="ColorMinimumText"
+                            Foreground="{ThemeResource AISkyTextMutedBrush}"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Text="--" />
+                        <StackPanel
+                            Grid.Column="1"
+                            HorizontalAlignment="Center"
+                            Orientation="Horizontal"
+                            Spacing="4">
+                            <TextBlock
+                                x:Name="ColorPaletteModeText"
+                                Foreground="{ThemeResource AISkyTextMutedBrush}"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="变量默认" />
+                            <FontIcon
+                                FontSize="10"
+                                Foreground="{ThemeResource AISkyTextMutedBrush}"
+                                Glyph="&#xE70D;" />
+                        </StackPanel>
+                        <TextBlock
+                            x:Name="ColorMaximumText"
+                            Grid.Column="2"
+                            HorizontalAlignment="Right"
+                            Foreground="{ThemeResource AISkyTextMutedBrush}"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Text="--" />
+                    </Grid>
+                </StackPanel>
+            </Button>
         </Border>
         </Grid>
 

@@ -20,4 +20,11 @@ public sealed record AppSettings
     public bool ShowWindAnimation { get; init; } = true;
     public bool ShowTyphoonPaths { get; init; } = true;
     public int DisplayUtcOffsetHours { get; init; }
+    public Dictionary<string, LayerPalettePreference> LayerPalettes { get; init; } = [];
+}
+
+public sealed record LayerPalettePreference
+{
+    public string PaletteId { get; init; } = "";
+    public bool Reversed { get; init; }
 }

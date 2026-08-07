@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Text.Json;
+using AISky_Desktop.Core;
 using AISky_Desktop.DataWorker;
 using AISky_Desktop.Infrastructure;
 using Microsoft.UI.Dispatching;
@@ -32,6 +33,7 @@ public sealed partial class MainPage : Page
     private bool _suppressSelection;
     private bool _suppressAutoSync = true;
     private bool _suppressDisplaySettings = true;
+    private bool _suppressPaletteSelection;
     private bool _backgroundEventsAttached;
     private bool _isPlaying;
     private bool _firstRunBusy;
@@ -47,8 +49,10 @@ public sealed partial class MainPage : Page
     private string? _lastMapSeriesKey;
     private readonly List<Button> _timelineSlotButtons = [];
     private readonly List<LayerItem> _allLayerItems = [];
+    private readonly SemaphoreSlim _paletteSettingsGate = new(1, 1);
 
     public ObservableCollection<LayerItem> LayerItems { get; } = [];
+    public ObservableCollection<ColorPaletteOption> PaletteOptions { get; } = [];
     public bool CanShowUpdatePrompt =>
         StartupCover.Visibility == Visibility.Collapsed
         && FirstRunOverlay.Visibility == Visibility.Collapsed
@@ -1144,6 +1148,172 @@ public sealed partial class MainPage : Page
         PostMapMessage(new { type = "set-layer", layer = layer.Id });
     }
 
+    private void ColorPaletteFlyout_Opening(object? sender, object e)
+    {
+        if (LayerList.SelectedItem is not LayerItem layer)
+        {
+            ColorPaletteFlyout.Hide();
+            return;
+        }
+
+        PaletteFlyoutTitle.Text = $"{layer.Code} · {layer.Name}";
+        PaletteFlyoutHint.Text =
+            $"仅应用于当前变量，并自动保存 · {ColorPaletteCatalog.All.Count} 种可选色带";
+        PaletteSearchBox.Text = "";
+        var preference = GetLayerPalettePreference(layer.Id);
+        PopulatePaletteOptions(layer, preference);
+    }
+
+    private void PaletteSearchBox_TextChanged(
+        AutoSuggestBox sender,
+        AutoSuggestBoxTextChangedEventArgs args)
+    {
+        if (args.Reason != AutoSuggestionBoxTextChangeReason.UserInput
+            || LayerList.SelectedItem is not LayerItem layer)
+        {
+            return;
+        }
+
+        PopulatePaletteOptions(layer, GetLayerPalettePreference(layer.Id));
+    }
+
+    private async void PaletteList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressPaletteSelection
+            || LayerList.SelectedItem is not LayerItem layer
+            || PaletteList.SelectedItem is not ColorPaletteOption option)
+        {
+            return;
+        }
+
+        await SaveLayerPaletteAsync(
+            layer,
+            option.IsAutomatic ? "" : option.Id,
+            ReversePaletteToggle.IsOn);
+    }
+
+    private async void ReversePaletteToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_suppressPaletteSelection
+            || LayerList.SelectedItem is not LayerItem layer)
+        {
+            return;
+        }
+
+        var preference = GetLayerPalettePreference(layer.Id);
+        var selectedId = (PaletteList.SelectedItem as ColorPaletteOption)?.Id
+            ?? preference.PaletteId;
+        await SaveLayerPaletteAsync(
+            layer,
+            selectedId,
+            ReversePaletteToggle.IsOn);
+        PopulatePaletteOptions(layer, GetLayerPalettePreference(layer.Id));
+    }
+
+    private void PopulatePaletteOptions(
+        LayerItem layer,
+        LayerPalettePreference preference)
+    {
+        _suppressPaletteSelection = true;
+        try
+        {
+            var searchText = PaletteSearchBox.Text.Trim();
+            PaletteOptions.Clear();
+            if (string.IsNullOrEmpty(searchText)
+                || "跟随变量默认".Contains(searchText, StringComparison.OrdinalIgnoreCase)
+                || "default".Contains(searchText, StringComparison.OrdinalIgnoreCase))
+            {
+                PaletteOptions.Add(new ColorPaletteOption(
+                    "",
+                    "跟随变量默认",
+                    ApplyPaletteDirection(layer.Palette, preference.Reversed),
+                    isAutomatic: true));
+            }
+
+            foreach (var palette in ColorPaletteCatalog.All.Where(palette =>
+                         string.IsNullOrEmpty(searchText)
+                         || palette.Name.Contains(searchText, StringComparison.OrdinalIgnoreCase)
+                         || palette.Id.Contains(searchText, StringComparison.OrdinalIgnoreCase)))
+            {
+                PaletteOptions.Add(new ColorPaletteOption(
+                    palette.Id,
+                    palette.Name,
+                    ApplyPaletteDirection(palette.Colors, preference.Reversed)));
+            }
+
+            PaletteList.SelectedItem = PaletteOptions.FirstOrDefault(option =>
+                string.Equals(
+                    option.Id,
+                    preference.PaletteId,
+                    StringComparison.OrdinalIgnoreCase))
+                ?? (string.IsNullOrEmpty(searchText)
+                    ? PaletteOptions.FirstOrDefault()
+                    : null);
+            ReversePaletteToggle.IsOn = preference.Reversed;
+        }
+        finally
+        {
+            _suppressPaletteSelection = false;
+        }
+    }
+
+    private async Task SaveLayerPaletteAsync(
+        LayerItem layer,
+        string paletteId,
+        bool reversed)
+    {
+        await _paletteSettingsGate.WaitAsync();
+        try
+        {
+            var settings = App.Services.CurrentSettings;
+            var preferences = new Dictionary<string, LayerPalettePreference>(
+                settings.LayerPalettes ?? [],
+                StringComparer.OrdinalIgnoreCase);
+            var key = layer.Id.ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(paletteId) && !reversed)
+            {
+                preferences.Remove(key);
+            }
+            else
+            {
+                preferences[key] = new LayerPalettePreference
+                {
+                    PaletteId = paletteId,
+                    Reversed = reversed,
+                };
+            }
+
+            await App.Services.UpdateSettingsAsync(
+                settings with { LayerPalettes = preferences });
+            ApplyLayerPalette(layer);
+        }
+        catch (Exception exception)
+        {
+            ServiceStatusText.Text = "色带设置保存失败";
+            await App.Services.Log.WriteAsync("ERROR", $"Palette update failed: {exception}");
+        }
+        finally
+        {
+            _paletteSettingsGate.Release();
+        }
+    }
+
+    private void ApplyLayerPalette(LayerItem layer)
+    {
+        var palette = ResolveLayerPalette(layer.Id, layer.Palette);
+        UpdateColorBar(layer);
+        _lastMapSeriesKey = null;
+        PostMapMessage(new
+        {
+            type = "set-palette",
+            layer = layer.Id,
+            palette,
+            paletteOverride = HasLayerPaletteOverride(layer.Id),
+        });
+        ServiceStatusText.Text =
+            $"{layer.Code} 已使用 {ColorPaletteModeText.Text} 色带";
+    }
+
     private void LayerSearchBox_TextChanged(
         AutoSuggestBox sender,
         AutoSuggestBoxTextChangedEventArgs args)
@@ -1594,7 +1764,8 @@ public sealed partial class MainPage : Page
                     label = layer.Label,
                     cn = layer.Name,
                     unit = layer.Unit,
-                    palette = layer.Palette,
+                    palette = ResolveLayerPalette(layer.Id, layer.Palette),
+                    paletteOverride = HasLayerPaletteOverride(layer.Id),
                     sampleUrl = string.IsNullOrWhiteSpace(layer.Sample)
                         ? null
                         : BuildDataUrl(layer.Sample),
@@ -1673,7 +1844,7 @@ public sealed partial class MainPage : Page
             }));
     }
 
-    private static object CreateMapRun(ForecastRun run) =>
+    private object CreateMapRun(ForecastRun run) =>
         new
         {
             id = run.Id,
@@ -1696,7 +1867,8 @@ public sealed partial class MainPage : Page
                 cn = layer.Name,
                 unit = layer.Unit,
                 range = layer.Range,
-                palette = layer.Palette,
+                palette = ResolveLayerPalette(layer.Id, layer.Palette),
+                paletteOverride = HasLayerPaletteOverride(layer.Id),
                 fieldUrl = BuildDataUrl(layer.Field),
                 sampleUrl = string.IsNullOrWhiteSpace(layer.Sample)
                     ? null
@@ -1753,19 +1925,25 @@ public sealed partial class MainPage : Page
 
     private void UpdateColorBar(LayerItem layer)
     {
+        var preference = GetLayerPalettePreference(layer.Id);
+        var palette = ResolveLayerPalette(layer.Id, layer.Palette);
         ColorMinimumText.Text = FormatValue(layer.Range.FirstOrDefault(), layer.Unit);
         ColorMaximumText.Text = FormatValue(layer.Range.LastOrDefault(), layer.Unit);
         ColorLayerText.Text = layer.Name;
         ColorUnitText.Text = string.IsNullOrWhiteSpace(layer.Unit)
             ? layer.Code
             : $"{layer.Code} · {layer.Unit}";
+        var definition = ColorPaletteCatalog.Find(preference.PaletteId);
+        ColorPaletteModeText.Text =
+            $"{definition?.Name ?? "变量默认"}{(preference.Reversed ? " · 反转" : "")}";
+        ColorBarButton.IsEnabled = true;
         ColorBarGradient.GradientStops.Clear();
-        for (var index = 0; index < layer.Palette.Count; index++)
+        for (var index = 0; index < palette.Count; index++)
         {
             ColorBarGradient.GradientStops.Add(new GradientStop
             {
-                Color = LayerItem.ParseColor(layer.Palette[index]),
-                Offset = layer.Palette.Count == 1 ? 0 : index / (double)(layer.Palette.Count - 1),
+                Color = LayerItem.ParseColor(palette[index]),
+                Offset = palette.Count == 1 ? 0 : index / (double)(palette.Count - 1),
             });
         }
     }
@@ -1776,6 +1954,51 @@ public sealed partial class MainPage : Page
         ColorMaximumText.Text = "--";
         ColorLayerText.Text = "等待数据";
         ColorUnitText.Text = "";
+        ColorPaletteModeText.Text = "变量默认";
+        ColorBarButton.IsEnabled = false;
+    }
+
+    private static List<string> ApplyPaletteDirection(
+        IReadOnlyList<string> colors,
+        bool reversed) =>
+        reversed ? colors.Reverse().ToList() : colors.ToList();
+
+    private LayerPalettePreference GetLayerPalettePreference(string layerId)
+    {
+        var preferences = App.Services.CurrentSettings.LayerPalettes;
+        if (preferences is not null
+            && preferences.TryGetValue(layerId.ToLowerInvariant(), out var preference))
+        {
+            return preference;
+        }
+        if (preferences is not null)
+        {
+            var pair = preferences.FirstOrDefault(item =>
+                string.Equals(item.Key, layerId, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(pair.Key))
+            {
+                return pair.Value;
+            }
+        }
+        return new LayerPalettePreference();
+    }
+
+    private bool HasLayerPaletteOverride(string layerId)
+    {
+        var preference = GetLayerPalettePreference(layerId);
+        return preference.Reversed
+            || ColorPaletteCatalog.Find(preference.PaletteId) is not null;
+    }
+
+    private List<string> ResolveLayerPalette(
+        string layerId,
+        IReadOnlyList<string> defaultPalette)
+    {
+        var preference = GetLayerPalettePreference(layerId);
+        var selected = ColorPaletteCatalog.Find(preference.PaletteId);
+        return ApplyPaletteDirection(
+            selected?.Colors ?? defaultPalette,
+            preference.Reversed);
     }
 
     private void SetPlaybackState(bool isPlaying)
@@ -1926,7 +2149,7 @@ public sealed class LayerItem
             Range = layer.Range,
             Palette = palette,
             Thumbnail = $"ms-appx:///Assets/Layers/{layer.Id}.png",
-            Brush = CreateBrush(palette),
+            Brush = CreatePaletteBrush(palette, diagonal: true),
         };
     }
 
@@ -1954,12 +2177,16 @@ public sealed class LayerItem
         return "基础场";
     }
 
-    private static Brush CreateBrush(IReadOnlyList<string> colors)
+    public static Brush CreatePaletteBrush(
+        IReadOnlyList<string> colors,
+        bool diagonal = false)
     {
         var brush = new LinearGradientBrush
         {
             StartPoint = new Windows.Foundation.Point(0, 0),
-            EndPoint = new Windows.Foundation.Point(1, 1),
+            EndPoint = diagonal
+                ? new Windows.Foundation.Point(1, 1)
+                : new Windows.Foundation.Point(1, 0),
         };
         for (var index = 0; index < colors.Count; index++)
         {
@@ -1978,4 +2205,24 @@ public sealed class LayerItem
             Convert.ToByte(value[1..3], 16),
             Convert.ToByte(value[3..5], 16),
             Convert.ToByte(value[5..7], 16));
+}
+
+public sealed class ColorPaletteOption
+{
+    public ColorPaletteOption(
+        string id,
+        string name,
+        IReadOnlyList<string> colors,
+        bool isAutomatic = false)
+    {
+        Id = id;
+        Name = name;
+        IsAutomatic = isAutomatic;
+        PreviewBrush = LayerItem.CreatePaletteBrush(colors);
+    }
+
+    public string Id { get; }
+    public string Name { get; }
+    public bool IsAutomatic { get; }
+    public Brush PreviewBrush { get; }
 }

@@ -59,6 +59,12 @@ try {
         throw "Node.js is required for the typhoon path algorithm test."
     }
 
+    Write-Host "Running palette-catalog.test.ps1"
+    & (Join-Path $repoRoot "tests\palette-catalog.test.ps1")
+    if ($LASTEXITCODE -ne 0) {
+        throw "palette-catalog.test.ps1 failed."
+    }
+
     if ($Quick) {
         Write-Host "AISky quick data-pipeline test passed." -ForegroundColor Green
     }
