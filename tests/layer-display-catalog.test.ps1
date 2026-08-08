@@ -21,31 +21,31 @@ $requiredDefinitions = @(
 )
 
 foreach ($definition in $requiredDefinitions) {
-    if (-not $catalog.Contains($definition, [StringComparison]::Ordinal)) {
+    if ($catalog.IndexOf($definition, [StringComparison]::Ordinal) -lt 0) {
         throw "Missing authoritative display definition: $definition"
     }
 }
 
-if ($catalog.Contains('new("无",', [StringComparison]::Ordinal) `
-    -or $catalog.Contains('? "无" :', [StringComparison]::Ordinal)) {
+if ($catalog.IndexOf('new("无",', [StringComparison]::Ordinal) -ge 0 `
+    -or $catalog.IndexOf('? "无" :', [StringComparison]::Ordinal) -ge 0) {
     throw "Dimensionless layers must not display the placeholder unit 无."
 }
 
-if (-not $mainPage.Contains(
+if ($mainPage.IndexOf(
     '.OrderBy(layer => layer.Code, StringComparer.OrdinalIgnoreCase)',
-    [StringComparison]::Ordinal)) {
+    [StringComparison]::Ordinal) -lt 0) {
     throw "Default layer list is not alphabetically ordered."
 }
 
 foreach ($property in @("displayScale", "displayOffset")) {
-    if (-not $mainPage.Contains($property, [StringComparison]::Ordinal)) {
+    if ($mainPage.IndexOf($property, [StringComparison]::Ordinal) -lt 0) {
         throw "Map payload is missing $property."
     }
 }
 
-if (-not $map.Contains(
+if ($map.IndexOf(
     'return value * scale + offset;',
-    [StringComparison]::Ordinal)) {
+    [StringComparison]::Ordinal) -lt 0) {
     throw "Map sampling does not apply the display conversion."
 }
 

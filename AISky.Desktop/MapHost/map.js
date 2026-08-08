@@ -980,9 +980,12 @@ function drawGrid(width, height) {
 }
 
 function appendWrappedLine(line, width, height, longitudeOffset) {
+  const longitudeScale = width / (view.right - view.left);
+  const latitudeScale = height / (view.top - view.bottom);
   for (let index = 0; index < line.length; index += 1) {
     const point = line[index];
-    const [x, y] = project(point[0] + longitudeOffset, point[1], width, height);
+    const x = (point[0] + longitudeOffset - view.left) * longitudeScale;
+    const y = (view.top - point[1]) * latitudeScale;
     if (index === 0) {
       context.moveTo(x, y);
     } else {
@@ -1041,8 +1044,7 @@ function drawHydrology(width, height, firstCopy, lastCopy) {
 }
 
 function drawCoastlines(width, height) {
-  const firstCopy = Math.floor((view.left + 180) / 360) - 1;
-  const lastCopy = Math.floor((view.right + 180) / 360) + 1;
+  const { firstCopy, lastCopy } = mapMath.visibleLongitudeCopies(view);
   const longitudeSpan = view.right - view.left;
   drawHydrology(width, height, firstCopy, lastCopy);
 
@@ -1073,7 +1075,9 @@ function drawCoastlines(width, height) {
       : "rgba(16, 55, 66, 0.78)";
     context.lineWidth = 1.05 * mapRenderRatio;
     drawWrappedLines(
-      longitudeSpan <= 80 ? chinaCoastBorders : chinaCoastMajorBorders,
+      interactionActive
+        ? chinaCoastMajorBorders
+        : longitudeSpan <= 80 ? chinaCoastBorders : chinaCoastMajorBorders,
       width,
       height,
       firstCopy,
@@ -1087,7 +1091,9 @@ function drawCoastlines(width, height) {
         : "rgba(24, 72, 82, 0.62)";
       context.lineWidth = 0.72 * mapRenderRatio;
       drawWrappedLines(
-        longitudeSpan <= 80 ? chinaIslandBorders : chinaIslandMajorBorders,
+        interactionActive
+          ? chinaIslandMajorBorders
+          : longitudeSpan <= 80 ? chinaIslandBorders : chinaIslandMajorBorders,
         width,
         height,
         firstCopy,
@@ -1333,8 +1339,7 @@ function typhoonStyleForTrack(track) {
 function drawTyphoonPaths(width, height) {
   typhoonHitPoints = [];
   if (!showTyphoonPaths) return;
-  const firstCopy = Math.floor((view.left + 180) / 360) - 1;
-  const lastCopy = Math.floor((view.right + 180) / 360) + 1;
+  const { firstCopy, lastCopy } = mapMath.visibleLongitudeCopies(view);
   const ratio = mapRenderRatio;
   const longitudeSpan = view.right - view.left;
   const pointInterval = longitudeSpan <= 40 ? 1 : longitudeSpan <= 80 ? 2 : 4;
@@ -1616,7 +1621,7 @@ function animateWind(timestamp) {
   resizeWindCanvas();
   const width = windCanvas.width;
   const height = windCanvas.height;
-  const targetCount = Math.min(1550, Math.max(480, Math.round((width * height) / 2700)));
+  const targetCount = Math.min(1650, Math.max(520, Math.round((width * height) / 2500)));
   while (windParticles.length < targetCount) {
     const particle = {};
     resetWindParticle(particle);
@@ -1662,10 +1667,10 @@ function animateWind(timestamp) {
     }
 
     const strongWind = Math.max(0, Math.min(1, speed / 32));
-    const alpha = 0.30 + strongWind * 0.36;
+    const alpha = 0.42 + strongWind * 0.38;
     windContext.lineWidth = Math.max(
-      1.2,
-      windRenderRatio * (1.46 - strongWind * 0.18),
+      1.65,
+      windRenderRatio * (1.92 - strongWind * 0.20),
     );
     const tailX = ((particle.trail[0] - view.left) / lonSpan) * width;
     const tailY = ((view.top - particle.trail[1]) / latSpan) * height;
@@ -1677,9 +1682,9 @@ function animateWind(timestamp) {
       headX + 0.001,
       headY + 0.001,
     );
-    trailGradient.addColorStop(0, "rgba(205, 247, 250, 0)");
-    trailGradient.addColorStop(0.42, `rgba(224, 251, 253, ${alpha * 0.28})`);
-    trailGradient.addColorStop(1, `rgba(248, 255, 255, ${alpha})`);
+    trailGradient.addColorStop(0, "rgba(91, 222, 235, 0)");
+    trailGradient.addColorStop(0.38, `rgba(105, 231, 240, ${alpha * 0.38})`);
+    trailGradient.addColorStop(1, `rgba(247, 255, 255, ${alpha})`);
     windContext.strokeStyle = trailGradient;
     windContext.beginPath();
     for (let index = 0; index < particle.trail.length; index += 2) {
@@ -1870,6 +1875,13 @@ canvas.addEventListener("pointermove", (event) => {
       bottom: dragState.view.bottom + deltaLat,
     });
     requestRender();
+
+    const [lon, lat] = unproject(event.offsetX, event.offsetY);
+    coordinateLabel.textContent = `经度 ${lon.toFixed(2)}　纬度 ${lat.toFixed(2)}`;
+    canvas.style.cursor = "grabbing";
+    typhoonHover.hidden = true;
+    typhoonPreview.hidden = true;
+    return;
   }
 
   const [lon, lat] = unproject(event.offsetX, event.offsetY);

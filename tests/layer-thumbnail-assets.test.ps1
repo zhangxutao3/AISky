@@ -32,9 +32,9 @@ foreach ($layerId in $layerIds) {
     }
 }
 
-if (-not $generator.Contains('ccrs.Orthographic(', [StringComparison]::Ordinal) `
-    -or $generator.Contains('coastlines(', [StringComparison]::Ordinal) `
-    -or $generator.Contains('BORDERS', [StringComparison]::Ordinal)) {
+if ($generator.IndexOf('ccrs.Orthographic(', [StringComparison]::Ordinal) -lt 0 `
+    -or $generator.IndexOf('coastlines(', [StringComparison]::Ordinal) -ge 0 `
+    -or $generator.IndexOf('BORDERS', [StringComparison]::Ordinal) -ge 0) {
     throw "Layer thumbnails must use a border-free Cartopy Orthographic projection."
 }
 

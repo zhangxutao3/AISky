@@ -33,6 +33,22 @@ const world = mapMath.fitBounds(
   3440,
   1440,
 );
+
+assert.deepStrictEqual(
+  mapMath.visibleLongitudeCopies({ left: 45, right: 165 }),
+  { firstCopy: 0, lastCopy: 0 },
+  "regional views should draw only the visible world copy",
+);
+assert.deepStrictEqual(
+  mapMath.visibleLongitudeCopies({ left: -180, right: 180 }),
+  { firstCopy: 0, lastCopy: 0 },
+  "the global view should not overdraw clipped duplicate worlds",
+);
+assert.deepStrictEqual(
+  mapMath.visibleLongitudeCopies({ left: 170, right: 290 }),
+  { firstCopy: 0, lastCopy: 1 },
+  "views crossing 180 degrees should draw exactly two world copies",
+);
 assertUndistorted(world, 3440, 1440, "global view must be cropped, never distorted");
 assert.ok(world.right - world.left <= 360 + 1e-9);
 assert.ok(world.top - world.bottom <= 170 + 1e-9);

@@ -164,6 +164,20 @@
     );
   }
 
+  function visibleLongitudeCopies(view, minimumLongitude = -180, maximumLongitude = 180) {
+    const epsilon = 1e-7;
+    const firstCopy = Math.ceil(
+      (Number(view.left) - Number(maximumLongitude) + epsilon) / 360,
+    );
+    const lastCopy = Math.floor(
+      (Number(view.right) - Number(minimumLongitude) - epsilon) / 360,
+    );
+    return {
+      firstCopy: firstCopy || 0,
+      lastCopy: lastCopy || 0,
+    };
+  }
+
   return {
     DEFAULT_LIMITS,
     boundedCanvasRatio,
@@ -171,6 +185,7 @@
     constrainDegreesPerPixel,
     fitBounds,
     resizeView,
+    visibleLongitudeCopies,
     viewFromCenter,
     wrapLongitude,
   };

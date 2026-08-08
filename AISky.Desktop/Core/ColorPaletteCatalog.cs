@@ -59,6 +59,8 @@ public static class ColorPaletteCatalog
         new("radar", "雷达反射率", ["#E8F4FF", "#59C8FF", "#1874E8", "#1DBA52", "#73D13D", "#FADB14", "#FA8C16", "#F5222D", "#A8071A", "#722ED1"]),
         new("wind", "风速增强", ["#E8FAFF", "#91DDE8", "#45BFC2", "#38A169", "#A0C93D", "#F2C94C", "#F2994A", "#EB5757", "#9B2C68", "#4A235A"]),
         new("sst", "海表温度", ["#24106F", "#263DA8", "#1C78B7", "#22A7A1", "#6DC47B", "#C6D95A", "#F5CF4A", "#F28A3C", "#D8493E", "#8D1D4F"]),
+        new("batlow", "Batlow", ["#011959", "#174577", "#2F6F7E", "#4D9177", "#7DAE6A", "#B7C765", "#E3D76B", "#F4C77E", "#F29E8B", "#E36A8D", "#C33B83"]),
+        new("roma", "Roma", ["#7E1700", "#B3421B", "#D87842", "#EDAF78", "#F5DFB4", "#E8E8D5", "#B9DBD1", "#7EC1C4", "#3E96B2", "#1A6591", "#023858"]),
     ];
 
     public static ColorPaletteDefinition? Find(string? id) =>
