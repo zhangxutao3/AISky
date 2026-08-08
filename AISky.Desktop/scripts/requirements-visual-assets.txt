@@ -1,0 +1,5 @@
+cartopy>=0.25,<0.26
+matplotlib>=3.10,<4
+netCDF4>=1.7,<2
+numpy>=1.26,<2
+Pillow>=12,<13

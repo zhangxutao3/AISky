@@ -34,7 +34,7 @@ public sealed partial class TutorialDialog : ContentDialog
             [
                 "右侧可搜索和分类筛选变量，点击变量行切换产品。",
                 "点击色带选择 50 套方案或反转，并按变量分别记忆。",
-                "范围和单位采用产品表，无量纲变量显示为“无”。",
+                "范围和单位采用产品表，无量纲变量不显示单位。",
             ]),
         new(
             "\uE9CA",

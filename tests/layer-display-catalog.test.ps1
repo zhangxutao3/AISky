@@ -12,7 +12,7 @@ $map = Get-Content -LiteralPath $mapPath -Raw
 $requiredDefinitions = @(
     '["t2m"] = new("°C", -10, 40)',
     '["qv2m"] = new("kg/kg", 0, 0.025, 0.001)',
-    '["cldtot"] = new("无", 0, 1, 0.01)',
+    '["cldtot"] = new("", 0, 1, 0.01)',
     '["slp"] = new("hPa", 950, 1050)',
     '["ducmass"] = new("g/m²", 0, 1, 0.001)',
     '["dusmass"] = new("μg/m³", 0, 500)',
@@ -24,6 +24,11 @@ foreach ($definition in $requiredDefinitions) {
     if (-not $catalog.Contains($definition, [StringComparison]::Ordinal)) {
         throw "Missing authoritative display definition: $definition"
     }
+}
+
+if ($catalog.Contains('new("无",', [StringComparison]::Ordinal) `
+    -or $catalog.Contains('? "无" :', [StringComparison]::Ordinal)) {
+    throw "Dimensionless layers must not display the placeholder unit 无."
 }
 
 if (-not $mainPage.Contains(

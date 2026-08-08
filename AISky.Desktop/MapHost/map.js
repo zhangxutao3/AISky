@@ -923,11 +923,6 @@ function drawGrid(width, height) {
       ? "rgba(7, 38, 48, 0.96)"
       : "rgba(151, 211, 219, 0.92)"
     : "rgba(6, 38, 48, 0.94)";
-  const labelHalo = mapTheme === "dark"
-    ? activeField
-      ? "rgba(197, 231, 235, 0.72)"
-      : "rgba(6, 26, 34, 0.82)"
-    : "rgba(248, 253, 253, 0.86)";
   context.lineWidth = Math.max(1, ratio);
   context.strokeStyle = gridStroke;
   context.fillStyle = labelFill;
@@ -941,13 +936,8 @@ function drawGrid(width, height) {
   const topChromeInset = 82 * ratio;
   const bottomChromeInset = 126 * ratio;
   const drawLabel = (label, x, y) => {
-    context.lineWidth = 3 * ratio;
-    context.strokeStyle = labelHalo;
-    context.strokeText(label, x, y);
     context.fillStyle = labelFill;
     context.fillText(label, x, y);
-    context.lineWidth = Math.max(1, ratio);
-    context.strokeStyle = gridStroke;
   };
   context.textBaseline = "top";
   for (let lon = Math.ceil(view.left / lonStep) * lonStep; lon <= view.right; lon += lonStep) {
@@ -975,8 +965,15 @@ function drawGrid(width, height) {
     context.stroke();
     const suffix = lat === 0 ? "" : lat < 0 ? "S" : "N";
     const label = `${Math.abs(lat)}°${suffix}`;
-    if (y >= topChromeInset && y <= height - bottomChromeInset) {
-      drawLabel(label, edgeInset, y);
+    const labelWidth = context.measureText(label).width;
+    if (y >= topChromeInset + labelWidth / 2
+      && y <= height - bottomChromeInset - labelWidth / 2) {
+      context.save();
+      context.translate(edgeInset, y);
+      context.rotate(-Math.PI / 2);
+      context.textAlign = "center";
+      drawLabel(label, 0, 0);
+      context.restore();
     }
   }
   context.restore();

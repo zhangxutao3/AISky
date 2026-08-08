@@ -83,6 +83,12 @@ try {
         throw "layer-display-catalog.test.ps1 failed."
     }
 
+    Write-Host "Running layer-thumbnail-assets.test.ps1"
+    & (Join-Path $repoRoot "tests\layer-thumbnail-assets.test.ps1")
+    if ($LASTEXITCODE -ne 0) {
+        throw "layer-thumbnail-assets.test.ps1 failed."
+    }
+
     Write-Host "Running tutorial-flow.test.ps1"
     & (Join-Path $repoRoot "tests\tutorial-flow.test.ps1")
     if ($LASTEXITCODE -ne 0) {

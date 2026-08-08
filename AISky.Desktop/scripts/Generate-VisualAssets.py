@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 import argparse
-import math
 import sys
 from pathlib import Path
 
+import cartopy.crs as ccrs
+import matplotlib
 import numpy as np
 from netCDF4 import Dataset
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
+
+matplotlib.use("Agg")
+from matplotlib import pyplot as plt  # noqa: E402
+from matplotlib.colors import LinearSegmentedColormap, Normalize  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "DataWorker"))
@@ -19,14 +24,6 @@ import worker  # noqa: E402
 def color(value: str) -> tuple[int, int, int]:
     value = value.lstrip("#")
     return tuple(int(value[index:index + 2], 16) for index in (0, 2, 4))
-
-
-def interpolate(palette: tuple[str, ...], amount: np.ndarray) -> np.ndarray:
-    stops = np.asarray([color(item) for item in palette], dtype=np.float32)
-    scaled = np.nan_to_num(np.clip(amount, 0, 0.999999), nan=0.0) * (len(stops) - 1)
-    first = np.floor(scaled).astype(np.int32)
-    blend = (scaled - first)[..., None]
-    return (stops[first] * (1 - blend) + stops[np.minimum(first + 1, len(stops) - 1)] * blend).astype(np.uint8)
 
 
 def read_spec(dataset: Dataset, spec: worker.LayerSpec) -> np.ndarray | None:
@@ -44,47 +41,56 @@ def read_spec(dataset: Dataset, spec: worker.LayerSpec) -> np.ndarray | None:
 def globe_thumbnail(
     data: np.ndarray,
     spec: worker.LayerSpec,
+    latitudes: np.ndarray,
+    longitudes: np.ndarray,
     size: int = 96,
 ) -> Image.Image:
+    """Render a reusable border-free Orthographic field thumbnail with Cartopy."""
     scale = 3
     pixels = size * scale
-    yy, xx = np.mgrid[0:pixels, 0:pixels]
-    radius = pixels * 0.45
-    cx = cy = pixels / 2
-    x = (xx - cx) / radius
-    y = (cy - yy) / radius
-    rho = np.hypot(x, y)
-    inside = rho <= 1
-
-    lat0 = math.radians(22)
-    lon0 = math.radians(105)
-    c = np.arcsin(np.clip(rho, 0, 1))
-    safe_rho = np.where(rho == 0, 1, rho)
-    lat = np.arcsin(
-        np.cos(c) * math.sin(lat0)
-        + y * np.sin(c) * math.cos(lat0) / safe_rho
+    figure = plt.figure(figsize=(1, 1), dpi=pixels)
+    figure.patch.set_alpha(0)
+    axis = figure.add_axes(
+        (0.04, 0.04, 0.92, 0.92),
+        projection=ccrs.Orthographic(central_longitude=105, central_latitude=22),
     )
-    lon = lon0 + np.arctan2(
-        x * np.sin(c),
-        safe_rho * math.cos(lat0) * np.cos(c)
-        - y * math.sin(lat0) * np.sin(c),
+    axis.set_global()
+    axis.patch.set_facecolor((0, 0, 0, 0))
+    axis.spines["geo"].set_visible(False)
+    palette = LinearSegmentedColormap.from_list(
+        f"aisky-{spec.id}",
+        spec.palette,
+        N=256,
     )
-    lat = np.degrees(lat)
-    lon = (np.degrees(lon) + 180) % 360 - 180
+    axis.pcolormesh(
+        longitudes,
+        latitudes,
+        np.ma.masked_invalid(data),
+        transform=ccrs.PlateCarree(),
+        cmap=palette,
+        norm=Normalize(*spec.value_range, clip=True),
+        shading="auto",
+        rasterized=True,
+    )
+    figure.canvas.draw()
+    rgba = np.asarray(figure.canvas.buffer_rgba()).copy()
+    plt.close(figure)
+    return Image.fromarray(rgba, "RGBA").resize(
+        (size, size),
+        Image.Resampling.LANCZOS,
+    )
 
-    rows, cols = data.shape
-    row = np.clip(np.rint((lat + 90) / 180 * (rows - 1)), 0, rows - 1).astype(np.int32)
-    column = np.clip(np.rint((lon + 180) / 360 * (cols - 1)), 0, cols - 1).astype(np.int32)
-    sampled = data[row, column]
-    low, high = spec.value_range
-    amount = (sampled - low) / max(1e-6, high - low)
-    rgb = interpolate(spec.palette, amount)
 
-    rgba = np.zeros((pixels, pixels, 4), dtype=np.uint8)
-    rgba[..., :3] = rgb
-    rgba[..., 3] = np.where(inside & np.isfinite(sampled), 255, 0)
-    image = Image.fromarray(rgba, "RGBA")
-    return image.resize((size, size), Image.Resampling.LANCZOS)
+def read_coordinates(dataset: Dataset) -> tuple[np.ndarray, np.ndarray]:
+    latitude_name = worker.find_variable(dataset, ("lat", "latitude"))
+    longitude_name = worker.find_variable(dataset, ("lon", "longitude"))
+    if not latitude_name or not longitude_name:
+        raise ValueError("NetCDF 中缺少缩略图所需的经纬度坐标。")
+    latitudes = np.asarray(dataset[latitude_name][:], dtype=np.float32).squeeze()
+    longitudes = np.asarray(dataset[longitude_name][:], dtype=np.float32).squeeze()
+    if latitudes.ndim != 1 or longitudes.ndim != 1:
+        raise ValueError("缩略图生成器仅支持一维经纬度坐标。")
+    return latitudes, longitudes
 
 
 def simplify_legacy_thumbnail(path: Path, size: int = 96) -> None:
@@ -154,26 +160,41 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--sds", type=Path, required=True)
     parser.add_argument("--energy", type=Path, required=True)
+    parser.add_argument(
+        "--only",
+        nargs="+",
+        default=(),
+        help="只重建指定的小写变量 ID；省略时重建全部缩略图。",
+    )
     args = parser.parse_args()
 
-    app_artwork(ROOT / "Assets")
+    selected = {item.lower() for item in args.only}
+    if not selected:
+        app_artwork(ROOT / "Assets")
     target = ROOT / "Assets" / "Layers"
     target.mkdir(parents=True, exist_ok=True)
     generated: set[str] = set()
     with Dataset(args.energy) as energy, Dataset(args.sds) as sds:
+        energy_coordinates = read_coordinates(energy)
+        sds_coordinates = read_coordinates(sds)
         for spec in worker.COMMON_LAYERS:
+            if selected and spec.id not in selected:
+                continue
             data = read_spec(energy, spec)
+            coordinates = energy_coordinates
             if data is None:
                 data = read_spec(sds, spec)
+                coordinates = sds_coordinates
             if data is None:
                 continue
-            globe_thumbnail(data, spec).save(target / f"{spec.id}.png")
+            globe_thumbnail(data, spec, *coordinates).save(target / f"{spec.id}.png")
             generated.add(spec.id)
             print(spec.id)
-    for path in target.glob("*.png"):
-        if path.stem not in generated:
-            simplify_legacy_thumbnail(path)
-            print(f"{path.stem} (simplified)")
+    if not selected:
+        for path in target.glob("*.png"):
+            if path.stem not in generated:
+                simplify_legacy_thumbnail(path)
+                print(f"{path.stem} (simplified)")
 
 
 if __name__ == "__main__":
